@@ -1,0 +1,8874 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>強化學習3D知識圖譜</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three-spritetext@1.6.5/dist/three-spritetext.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FontLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/geometries/TextGeometry.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: "Microsoft JhengHei", Arial, sans-serif;
+            background-color: #f0f0f0;
+        }
+        #container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        #info-panel {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 300px;
+            background-color: rgba(255, 255, 255, 0.9);
+            border-radius: 10px;
+            padding: 15px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            display: none;
+            max-height: 80vh;
+            overflow-y: auto;
+            z-index: 100;
+        }
+        #info-panel h2 {
+            margin-top: 0;
+            color: #2C3E50;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 10px;
+        }
+        #info-panel p {
+            line-height: 1.5;
+        }
+        #controls {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background-color: rgba(255, 255, 255, 0.9);
+            border-radius: 10px;
+            padding: 15px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            z-index: 100;
+        }
+        #controls button {
+            margin-right: 10px;
+            margin-bottom: 5px;
+            padding: 8px 15px;
+            background-color: #3498DB;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        #controls button:hover {
+            background-color: #2980B9;
+        }
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 24px;
+            color: #3498DB;
+            z-index: 100;
+        }
+        .legend {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background-color: rgba(255, 255, 255, 0.9);
+            border-radius: 10px;
+            padding: 15px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            z-index: 100;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            margin-right: 10px;
+            border-radius: 3px;
+        }
+        #view-modes {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background-color: rgba(255, 255, 255, 0.9);
+            border-radius: 10px;
+            padding: 15px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            z-index: 100;
+        }
+        #view-modes button {
+            margin-right: 10px;
+            padding: 8px 15px;
+            background-color: #3498DB;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        #view-modes button.active {
+            background-color: #2C3E50;
+        }
+        #view-modes button:hover {
+            background-color: #2980B9;
+        }
+        #stats {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(255, 255, 255, 0.9);
+            border-radius: 10px;
+            padding: 10px 15px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            z-index: 100;
+            font-size: 14px;
+            color: #2C3E50;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="info-panel">
+            <h2 id="node-title">節點資訊</h2>
+            <div id="node-content"></div>
+        </div>
+        <div id="controls">
+            <button id="reset-view">重置視圖</button>
+            <button id="toggle-rotation">暫停旋轉</button>
+            <button id="toggle-labels">隱藏標籤</button>
+            <button id="toggle-edges">隱藏連線</button>
+            <button id="toggle-axes">隱藏座標軸</button>
+        </div>
+        <div id="view-modes">
+            <button id="sphere-layout" class="active">球形佈局</button>
+            <button id="hierarchical-layout">階層佈局</button>
+            <button id="force-layout">力導向佈局</button>
+        </div>
+        <div id="stats">
+            節點數: <span id="node-count">0</span> | 連線數: <span id="edge-count">0</span> | FPS: <span id="fps">0</span>
+        </div>
+        <div class="legend">
+            <h3>圖例</h3>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #FF7777;"></div>
+                <span>第一章：引言</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #77FF77;"></div>
+                <span>第二章：馬爾可夫決策過程</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #7777FF;"></div>
+                <span>第三章：動態規劃</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #FFFF77;"></div>
+                <span>第四章：無模型預測</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #FF77FF;"></div>
+                <span>第五章：無模型控制</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #77FFFF;"></div>
+                <span>第六章：值函數近似</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #FF9966;"></div>
+                <span>第七章：策略梯度</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #9966FF;"></div>
+                <span>第八章：強化學習前沿</span>
+            </div>
+        </div>
+        <div id="loading">載入中...</div>
+    </div>
+
+    <script>
+        // 直接定義知識節點數據
+        const knowledgeNodes = {
+  "n0": {
+    "title": "第2章       线性代数",
+    "content": "",
+    "color": "#CC3D3D",
+    "level": 0,
+    "chapter": 0
+  },
+  "n1": {
+    "title": "1.1     本书面向的读者",
+    "content": "",
+    "color": "#CC3D3D",
+    "level": 1,
+    "chapter": 0
+  },
+  "n2": {
+    "title": "1.2     深度学习的历史趋势",
+    "content": "",
+    "color": "#CC3D3D",
+    "level": 1,
+    "chapter": 0
+  },
+  "n3": {
+    "title": "1.2.1    神经网络的众多名称和命运变迁",
+    "content": "",
+    "color": "#CC3D3D",
+    "level": 1,
+    "chapter": 0
+  },
+  "n4": {
+    "title": "1.2.2    与日俱增的数据量",
+    "content": "",
+    "color": "#CC3D3D",
+    "level": 1,
+    "chapter": 0
+  },
+  "n5": {
+    "title": "1.2.3    与日俱增的模型规模",
+    "content": "",
+    "color": "#CC3D3D",
+    "level": 1,
+    "chapter": 0
+  },
+  "n6": {
+    "title": "1.2.4    与日俱增的精度、复杂度和对现实世界的冲击",
+    "content": "",
+    "color": "#CC3D3D",
+    "level": 1,
+    "chapter": 0
+  },
+  "n7": {
+    "title": "1.1   本书面向的读者",
+    "content": "",
+    "color": "#CC3D3D",
+    "level": 1,
+    "chapter": 0
+  },
+  "n8": {
+    "title": "1.2   深度学习的历史趋势",
+    "content": "",
+    "color": "#CC3D3D",
+    "level": 1,
+    "chapter": 0
+  },
+  "n9": {
+    "title": "1.2.1 神经网络的众多名称和命运变迁",
+    "content": "",
+    "color": "#CC3D3D",
+    "level": 1,
+    "chapter": 0
+  },
+  "n10": {
+    "title": "1.2.2 与日俱增的数据量",
+    "content": "",
+    "color": "#CC3D3D",
+    "level": 1,
+    "chapter": 0
+  },
+  "n11": {
+    "title": "1.2.3 与日俱增的模型规模",
+    "content": "",
+    "color": "#CC3D3D",
+    "level": 1,
+    "chapter": 0
+  },
+  "n12": {
+    "title": "1.2.4 与日俱增的精度、复杂度和对现实世界的冲击",
+    "content": "",
+    "color": "#CC3D3D",
+    "level": 1,
+    "chapter": 0
+  },
+  "n13": {
+    "title": "第3章      概率与信息论",
+    "content": "",
+    "color": "#CC5F3D",
+    "level": 0,
+    "chapter": 1
+  },
+  "n14": {
+    "title": "2.1     标量、向量、矩阵和张量",
+    "content": "",
+    "color": "#CC5F3D",
+    "level": 1,
+    "chapter": 1
+  },
+  "n15": {
+    "title": "2.2     矩阵和向量相乘",
+    "content": "",
+    "color": "#CC5F3D",
+    "level": 1,
+    "chapter": 1
+  },
+  "n16": {
+    "title": "2.3     单位矩阵和逆矩阵",
+    "content": "",
+    "color": "#CC5F3D",
+    "level": 1,
+    "chapter": 1
+  },
+  "n17": {
+    "title": "2.4     线性相关和生成子空间",
+    "content": "",
+    "color": "#CC5F3D",
+    "level": 1,
+    "chapter": 1
+  },
+  "n18": {
+    "title": "2.5     范数",
+    "content": "",
+    "color": "#CC5F3D",
+    "level": 1,
+    "chapter": 1
+  },
+  "n19": {
+    "title": "2.6     特殊类型的矩阵和向量",
+    "content": "",
+    "color": "#CC5F3D",
+    "level": 1,
+    "chapter": 1
+  },
+  "n20": {
+    "title": "2.7     特征分解",
+    "content": "",
+    "color": "#CC5F3D",
+    "level": 1,
+    "chapter": 1
+  },
+  "n21": {
+    "title": "2.8     奇异值分解",
+    "content": "",
+    "color": "#CC5F3D",
+    "level": 1,
+    "chapter": 1
+  },
+  "n22": {
+    "title": "2.9     Moore-Penrose伪逆",
+    "content": "",
+    "color": "#CC5F3D",
+    "level": 1,
+    "chapter": 1
+  },
+  "n23": {
+    "title": "2.10 迹运算",
+    "content": "",
+    "color": "#CC5F3D",
+    "level": 1,
+    "chapter": 1
+  },
+  "n24": {
+    "title": "2.11 行列式",
+    "content": "",
+    "color": "#CC5F3D",
+    "level": 1,
+    "chapter": 1
+  },
+  "n25": {
+    "title": "2.1   标量、向量、矩阵和张量",
+    "content": "",
+    "color": "#CC5F3D",
+    "level": 1,
+    "chapter": 1
+  },
+  "n26": {
+    "title": "2.2   矩阵和向量相乘",
+    "content": "",
+    "color": "#CC5F3D",
+    "level": 1,
+    "chapter": 1
+  },
+  "n27": {
+    "title": "2.3   单位矩阵和逆矩阵",
+    "content": "",
+    "color": "#CC5F3D",
+    "level": 1,
+    "chapter": 1
+  },
+  "n28": {
+    "title": "2.4   线性相关和生成子空间",
+    "content": "",
+    "color": "#CC5F3D",
+    "level": 1,
+    "chapter": 1
+  },
+  "n29": {
+    "title": "2.5   范数",
+    "content": "",
+    "color": "#CC5F3D",
+    "level": 1,
+    "chapter": 1
+  },
+  "n30": {
+    "title": "2.6   特殊类型的矩阵和向量",
+    "content": "",
+    "color": "#CC5F3D",
+    "level": 1,
+    "chapter": 1
+  },
+  "n31": {
+    "title": "2.7   特征分解",
+    "content": "",
+    "color": "#CC5F3D",
+    "level": 1,
+    "chapter": 1
+  },
+  "n32": {
+    "title": "2.8   奇异值分解",
+    "content": "",
+    "color": "#CC5F3D",
+    "level": 1,
+    "chapter": 1
+  },
+  "n33": {
+    "title": "2.9   Moore-Penrose伪逆",
+    "content": "",
+    "color": "#CC5F3D",
+    "level": 1,
+    "chapter": 1
+  },
+  "n34": {
+    "title": "2.10   迹运算",
+    "content": "",
+    "color": "#CC5F3D",
+    "level": 1,
+    "chapter": 1
+  },
+  "n35": {
+    "title": "2.11   行列式",
+    "content": "",
+    "color": "#CC5F3D",
+    "level": 1,
+    "chapter": 1
+  },
+  "n36": {
+    "title": "2.12   实例：主成分分析",
+    "content": "",
+    "color": "#CC5F3D",
+    "level": 1,
+    "chapter": 1
+  },
+  "n37": {
+    "title": "第4章      数值计算",
+    "content": "",
+    "color": "#CC813D",
+    "level": 0,
+    "chapter": 2
+  },
+  "n38": {
+    "title": "3.1     为什么要使用概率",
+    "content": "",
+    "color": "#CC813D",
+    "level": 1,
+    "chapter": 2
+  },
+  "n39": {
+    "title": "3.2     随机变量",
+    "content": "",
+    "color": "#CC813D",
+    "level": 1,
+    "chapter": 2
+  },
+  "n40": {
+    "title": "3.3     概率分布",
+    "content": "",
+    "color": "#CC813D",
+    "level": 1,
+    "chapter": 2
+  },
+  "n41": {
+    "title": "3.3.1   离散型变量和概率质量函数",
+    "content": "",
+    "color": "#CC813D",
+    "level": 1,
+    "chapter": 2
+  },
+  "n42": {
+    "title": "3.3.2   连续型变量和概率密度函数",
+    "content": "",
+    "color": "#CC813D",
+    "level": 1,
+    "chapter": 2
+  },
+  "n43": {
+    "title": "3.4     边缘概率",
+    "content": "",
+    "color": "#CC813D",
+    "level": 1,
+    "chapter": 2
+  },
+  "n44": {
+    "title": "3.5     条件概率",
+    "content": "",
+    "color": "#CC813D",
+    "level": 1,
+    "chapter": 2
+  },
+  "n45": {
+    "title": "3.6     条件概率的链式法则",
+    "content": "",
+    "color": "#CC813D",
+    "level": 1,
+    "chapter": 2
+  },
+  "n46": {
+    "title": "3.7     独立性和条件独立性",
+    "content": "",
+    "color": "#CC813D",
+    "level": 1,
+    "chapter": 2
+  },
+  "n47": {
+    "title": "3.8     期望、方差和协方差",
+    "content": "",
+    "color": "#CC813D",
+    "level": 1,
+    "chapter": 2
+  },
+  "n48": {
+    "title": "3.9     常用概率分布",
+    "content": "",
+    "color": "#CC813D",
+    "level": 1,
+    "chapter": 2
+  },
+  "n49": {
+    "title": "3.9.1   Bernoulli分布",
+    "content": "",
+    "color": "#CC813D",
+    "level": 1,
+    "chapter": 2
+  },
+  "n50": {
+    "title": "3.9.2   Multinoulli分布",
+    "content": "",
+    "color": "#CC813D",
+    "level": 1,
+    "chapter": 2
+  },
+  "n51": {
+    "title": "3.9.3   高斯分布",
+    "content": "",
+    "color": "#CC813D",
+    "level": 1,
+    "chapter": 2
+  },
+  "n52": {
+    "title": "3.9.4   指数分布和Laplace分布",
+    "content": "",
+    "color": "#CC813D",
+    "level": 1,
+    "chapter": 2
+  },
+  "n53": {
+    "title": "3.9.5   Dirac分布和经验分布",
+    "content": "",
+    "color": "#CC813D",
+    "level": 1,
+    "chapter": 2
+  },
+  "n54": {
+    "title": "3.9.6   分布的混合",
+    "content": "",
+    "color": "#CC813D",
+    "level": 1,
+    "chapter": 2
+  },
+  "n55": {
+    "title": "3.10 常用函数的有用性质",
+    "content": "",
+    "color": "#CC813D",
+    "level": 1,
+    "chapter": 2
+  },
+  "n56": {
+    "title": "3.12 连续型变量的技术细节",
+    "content": "",
+    "color": "#CC813D",
+    "level": 1,
+    "chapter": 2
+  },
+  "n57": {
+    "title": "3.13 信息论",
+    "content": "",
+    "color": "#CC813D",
+    "level": 1,
+    "chapter": 2
+  },
+  "n58": {
+    "title": "3.14 结构化概率模型",
+    "content": "",
+    "color": "#CC813D",
+    "level": 1,
+    "chapter": 2
+  },
+  "n59": {
+    "title": "3.1   为什么要使用概率",
+    "content": "",
+    "color": "#CC813D",
+    "level": 1,
+    "chapter": 2
+  },
+  "n60": {
+    "title": "3.2   随机变量",
+    "content": "",
+    "color": "#CC813D",
+    "level": 1,
+    "chapter": 2
+  },
+  "n61": {
+    "title": "3.3   概率分布",
+    "content": "",
+    "color": "#CC813D",
+    "level": 1,
+    "chapter": 2
+  },
+  "n62": {
+    "title": "3.3.1 离散型变量和概率质量函数",
+    "content": "",
+    "color": "#CC813D",
+    "level": 1,
+    "chapter": 2
+  },
+  "n63": {
+    "title": "3.3.2 连续型变量和概率密度函数",
+    "content": "",
+    "color": "#CC813D",
+    "level": 1,
+    "chapter": 2
+  },
+  "n64": {
+    "title": "3.4   边缘概率",
+    "content": "",
+    "color": "#CC813D",
+    "level": 1,
+    "chapter": 2
+  },
+  "n65": {
+    "title": "3.5   条件概率",
+    "content": "",
+    "color": "#CC813D",
+    "level": 1,
+    "chapter": 2
+  },
+  "n66": {
+    "title": "3.6   条件概率的链式法则",
+    "content": "",
+    "color": "#CC813D",
+    "level": 1,
+    "chapter": 2
+  },
+  "n67": {
+    "title": "3.7   独立性和条件独立性",
+    "content": "",
+    "color": "#CC813D",
+    "level": 1,
+    "chapter": 2
+  },
+  "n68": {
+    "title": "3.8   期望、方差和协方差",
+    "content": "",
+    "color": "#CC813D",
+    "level": 1,
+    "chapter": 2
+  },
+  "n69": {
+    "title": "3.9   常用概率分布",
+    "content": "",
+    "color": "#CC813D",
+    "level": 1,
+    "chapter": 2
+  },
+  "n70": {
+    "title": "3.9.1 Bernoulli分布",
+    "content": "",
+    "color": "#CC813D",
+    "level": 1,
+    "chapter": 2
+  },
+  "n71": {
+    "title": "3.9.2 Multinoulli分布",
+    "content": "",
+    "color": "#CC813D",
+    "level": 1,
+    "chapter": 2
+  },
+  "n72": {
+    "title": "3.9.3 高斯分布",
+    "content": "",
+    "color": "#CC813D",
+    "level": 1,
+    "chapter": 2
+  },
+  "n73": {
+    "title": "3.9.4 指数分布和Laplace分布",
+    "content": "",
+    "color": "#CC813D",
+    "level": 1,
+    "chapter": 2
+  },
+  "n74": {
+    "title": "3.9.5 Dirac分布和经验分布",
+    "content": "",
+    "color": "#CC813D",
+    "level": 1,
+    "chapter": 2
+  },
+  "n75": {
+    "title": "3.9.6 分布的混合",
+    "content": "",
+    "color": "#CC813D",
+    "level": 1,
+    "chapter": 2
+  },
+  "n76": {
+    "title": "3.11   贝叶斯规则",
+    "content": "",
+    "color": "#CC813D",
+    "level": 1,
+    "chapter": 2
+  },
+  "n77": {
+    "title": "3.12   连续型变量的技术细节",
+    "content": "",
+    "color": "#CC813D",
+    "level": 1,
+    "chapter": 2
+  },
+  "n78": {
+    "title": "3.13   信息论",
+    "content": "",
+    "color": "#CC813D",
+    "level": 1,
+    "chapter": 2
+  },
+  "n79": {
+    "title": "3.14   结构化概率模型",
+    "content": "",
+    "color": "#CC813D",
+    "level": 1,
+    "chapter": 2
+  },
+  "n80": {
+    "title": "第5章      机器学习基础",
+    "content": "",
+    "color": "#CCA43D",
+    "level": 0,
+    "chapter": 3
+  },
+  "n81": {
+    "title": "4.1     上溢和下溢",
+    "content": "",
+    "color": "#CCA43D",
+    "level": 1,
+    "chapter": 3
+  },
+  "n82": {
+    "title": "4.2     病态条件",
+    "content": "",
+    "color": "#CCA43D",
+    "level": 1,
+    "chapter": 3
+  },
+  "n83": {
+    "title": "4.3     基于梯度的优化方法",
+    "content": "",
+    "color": "#CCA43D",
+    "level": 1,
+    "chapter": 3
+  },
+  "n84": {
+    "title": "4.3.1   梯度之上：Jacobian和Hessian矩阵",
+    "content": "",
+    "color": "#CCA43D",
+    "level": 1,
+    "chapter": 3
+  },
+  "n85": {
+    "title": "4.4     约束优化",
+    "content": "",
+    "color": "#CCA43D",
+    "level": 1,
+    "chapter": 3
+  },
+  "n86": {
+    "title": "4.5     实例：线性最小二乘",
+    "content": "",
+    "color": "#CCA43D",
+    "level": 1,
+    "chapter": 3
+  },
+  "n87": {
+    "title": "4.1     上溢和下溢",
+    "content": "",
+    "color": "#CCA43D",
+    "level": 1,
+    "chapter": 3
+  },
+  "n88": {
+    "title": "4.2   病态条件",
+    "content": "",
+    "color": "#CCA43D",
+    "level": 1,
+    "chapter": 3
+  },
+  "n89": {
+    "title": "4.3   基于梯度的优化方法",
+    "content": "",
+    "color": "#CCA43D",
+    "level": 1,
+    "chapter": 3
+  },
+  "n90": {
+    "title": "4.1展示了一个例子。",
+    "content": "",
+    "color": "#CCA43D",
+    "level": 1,
+    "chapter": 3
+  },
+  "n91": {
+    "title": "4.4   约束优化",
+    "content": "",
+    "color": "#CCA43D",
+    "level": 1,
+    "chapter": 3
+  },
+  "n92": {
+    "title": "4.5     实例：线性最小二乘",
+    "content": "",
+    "color": "#CCA43D",
+    "level": 1,
+    "chapter": 3
+  },
+  "n93": {
+    "title": "第6章      深度前馈网络",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 0,
+    "chapter": 4
+  },
+  "n94": {
+    "title": "5.1     学习算法",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n95": {
+    "title": "5.1.1   任务T",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n96": {
+    "title": "5.1.2   性能度量P",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n97": {
+    "title": "5.1.3   经验E",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n98": {
+    "title": "5.1.4   示例：线性回归",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n99": {
+    "title": "5.2     容量、过拟合和欠拟合",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n100": {
+    "title": "5.2.1   没有免费午餐定理",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n101": {
+    "title": "5.2.2   正则化",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n102": {
+    "title": "5.3.1   交叉验证",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n103": {
+    "title": "5.4     估计、偏差和方差",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n104": {
+    "title": "5.4.1   点估计",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n105": {
+    "title": "5.4.2   偏差",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n106": {
+    "title": "5.4.3   方差和标准差",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n107": {
+    "title": "5.4.4   权衡偏差和方差以最小化均方误差",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n108": {
+    "title": "5.4.5   一致性",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n109": {
+    "title": "5.5     最大似然估计",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n110": {
+    "title": "5.5.1   条件对数似然和均方误差",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n111": {
+    "title": "5.5.2   最大似然的性质",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n112": {
+    "title": "5.6     贝叶斯统计",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n113": {
+    "title": "5.6.1   最大后验（MAP）估计",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n114": {
+    "title": "5.7     监督学习算法",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n115": {
+    "title": "5.7.1   概率监督学习",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n116": {
+    "title": "5.7.2   支持向量机",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n117": {
+    "title": "5.7.3   其他简单的监督学习算法",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n118": {
+    "title": "5.8     无监督学习算法",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n119": {
+    "title": "5.8.1   主成分分析",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n120": {
+    "title": "5.8.2   k-均值聚类",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n121": {
+    "title": "5.10 构建机器学习算法",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n122": {
+    "title": "5.11 促使深度学习发展的挑战",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n123": {
+    "title": "5.11.1 维数灾难",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n124": {
+    "title": "5.11.2 局部不变性和平滑正则化",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n125": {
+    "title": "5.11.3 流形学习",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n126": {
+    "title": "5.1   学习算法",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n127": {
+    "title": "5.1.1 任务T",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n128": {
+    "title": "5.1.2 性能度量P",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n129": {
+    "title": "5.1.3 经验E",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n130": {
+    "title": "5.1.4   示例：线性回归",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n131": {
+    "title": "5.2   容量、过拟合和欠拟合",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n132": {
+    "title": "5.4所示。值得注意的是，具有最优容量的模型仍然有可能在训练误差",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n133": {
+    "title": "5.2.1 没有免费午餐定理",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n134": {
+    "title": "5.2.2 正则化",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n135": {
+    "title": "5.3   超参数和验证集",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n136": {
+    "title": "5.3）。例如，相比低次多项式和正的权重衰减设定，更高次的多项式",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n137": {
+    "title": "5.3.1 交叉验证",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n138": {
+    "title": "5.4     估计、偏差和方差",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n139": {
+    "title": "5.4.1 点估计",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n140": {
+    "title": "5.4.2 偏差",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n141": {
+    "title": "5.4.3 方差和标准差",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n142": {
+    "title": "5.4.4 权衡偏差和方差以最小化均方误差",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n143": {
+    "title": "5.4.5 一致性",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n144": {
+    "title": "5.5   最大似然估计",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n145": {
+    "title": "5.5.1 条件对数似然和均方误差",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n146": {
+    "title": "5.5.2 最大似然的性质",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n147": {
+    "title": "5.6.1 最大后验（MAP）估计",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n148": {
+    "title": "5.7   监督学习算法",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n149": {
+    "title": "5.7.1 概率监督学习",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n150": {
+    "title": "5.7.2 支持向量机",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n151": {
+    "title": "5.7.3 其他简单的监督学习算法",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n152": {
+    "title": "5.8    无监督学习算法",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n153": {
+    "title": "5.8.1 主成分分析",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n154": {
+    "title": "5.8.2 k-均值聚类",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n155": {
+    "title": "5.9   随机梯度下降",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n156": {
+    "title": "5.10   构建机器学习算法",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n157": {
+    "title": "5.11     促使深度学习发展的挑战",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n158": {
+    "title": "5.11.1   维数灾难",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n159": {
+    "title": "5.11.2   局部不变性和平滑正则化",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n160": {
+    "title": "5.11.3   流形学习",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n161": {
+    "title": "5.13展示了包含人脸的数据集的流形结构。在本书的最后，我们会介绍",
+    "content": "",
+    "color": "#CCC63D",
+    "level": 1,
+    "chapter": 4
+  },
+  "n162": {
+    "title": "第7章      深度学习中的正则化",
+    "content": "",
+    "color": "#AFCC3D",
+    "level": 0,
+    "chapter": 5
+  },
+  "n163": {
+    "title": "6.1     实例：学习XOR",
+    "content": "",
+    "color": "#AFCC3D",
+    "level": 1,
+    "chapter": 5
+  },
+  "n164": {
+    "title": "6.2     基于梯度的学习",
+    "content": "",
+    "color": "#AFCC3D",
+    "level": 1,
+    "chapter": 5
+  },
+  "n165": {
+    "title": "6.2.1   代价函数",
+    "content": "",
+    "color": "#AFCC3D",
+    "level": 1,
+    "chapter": 5
+  },
+  "n166": {
+    "title": "6.2.2   输出单元",
+    "content": "",
+    "color": "#AFCC3D",
+    "level": 1,
+    "chapter": 5
+  },
+  "n167": {
+    "title": "6.3     隐藏单元",
+    "content": "",
+    "color": "#AFCC3D",
+    "level": 1,
+    "chapter": 5
+  },
+  "n168": {
+    "title": "6.3.1   整流线性单元及其扩展",
+    "content": "",
+    "color": "#AFCC3D",
+    "level": 1,
+    "chapter": 5
+  },
+  "n169": {
+    "title": "6.3.2   logistic sigmoid与双曲正切函数",
+    "content": "",
+    "color": "#AFCC3D",
+    "level": 1,
+    "chapter": 5
+  },
+  "n170": {
+    "title": "6.3.3   其他隐藏单元",
+    "content": "",
+    "color": "#AFCC3D",
+    "level": 1,
+    "chapter": 5
+  },
+  "n171": {
+    "title": "6.4     架构设计",
+    "content": "",
+    "color": "#AFCC3D",
+    "level": 1,
+    "chapter": 5
+  },
+  "n172": {
+    "title": "6.4.1   万能近似性质和深度",
+    "content": "",
+    "color": "#AFCC3D",
+    "level": 1,
+    "chapter": 5
+  },
+  "n173": {
+    "title": "6.4.2   其他架构上的考虑",
+    "content": "",
+    "color": "#AFCC3D",
+    "level": 1,
+    "chapter": 5
+  },
+  "n174": {
+    "title": "6.5     反向传播和其他的微分算法",
+    "content": "",
+    "color": "#AFCC3D",
+    "level": 1,
+    "chapter": 5
+  },
+  "n175": {
+    "title": "6.5.2   微积分中的链式法则",
+    "content": "",
+    "color": "#AFCC3D",
+    "level": 1,
+    "chapter": 5
+  },
+  "n176": {
+    "title": "6.5.3   递归地使用链式法则来实现反向传播",
+    "content": "",
+    "color": "#AFCC3D",
+    "level": 1,
+    "chapter": 5
+  },
+  "n177": {
+    "title": "6.5.4   全连接MLP中的反向传播计算",
+    "content": "",
+    "color": "#AFCC3D",
+    "level": 1,
+    "chapter": 5
+  },
+  "n178": {
+    "title": "6.5.5   符号到符号的导数",
+    "content": "",
+    "color": "#AFCC3D",
+    "level": 1,
+    "chapter": 5
+  },
+  "n179": {
+    "title": "6.5.6   一般化的反向传播",
+    "content": "",
+    "color": "#AFCC3D",
+    "level": 1,
+    "chapter": 5
+  },
+  "n180": {
+    "title": "6.5.7   实例：用于MLP训练的反向传播",
+    "content": "",
+    "color": "#AFCC3D",
+    "level": 1,
+    "chapter": 5
+  },
+  "n181": {
+    "title": "6.5.8   复杂化",
+    "content": "",
+    "color": "#AFCC3D",
+    "level": 1,
+    "chapter": 5
+  },
+  "n182": {
+    "title": "6.5.9   深度学习界以外的微分",
+    "content": "",
+    "color": "#AFCC3D",
+    "level": 1,
+    "chapter": 5
+  },
+  "n183": {
+    "title": "6.5.10 高阶微分",
+    "content": "",
+    "color": "#AFCC3D",
+    "level": 1,
+    "chapter": 5
+  },
+  "n184": {
+    "title": "6.6     历史小记",
+    "content": "",
+    "color": "#AFCC3D",
+    "level": 1,
+    "chapter": 5
+  },
+  "n185": {
+    "title": "6.1所示，它们现在处在一个可以用线性模型解决的空间上。",
+    "content": "",
+    "color": "#AFCC3D",
+    "level": 1,
+    "chapter": 5
+  },
+  "n186": {
+    "title": "6.2   基于梯度的学习",
+    "content": "",
+    "color": "#AFCC3D",
+    "level": 1,
+    "chapter": 5
+  },
+  "n187": {
+    "title": "6.2.1 代价函数",
+    "content": "",
+    "color": "#AFCC3D",
+    "level": 1,
+    "chapter": 5
+  },
+  "n188": {
+    "title": "6.2.1.1 使用最大似然学习条件分布",
+    "content": "",
+    "color": "#AFCC3D",
+    "level": 1,
+    "chapter": 5
+  },
+  "n189": {
+    "title": "6.2.1.2   学习条件统计量",
+    "content": "",
+    "color": "#AFCC3D",
+    "level": 1,
+    "chapter": 5
+  },
+  "n190": {
+    "title": "6.2.2 输出单元",
+    "content": "",
+    "color": "#AFCC3D",
+    "level": 1,
+    "chapter": 5
+  },
+  "n191": {
+    "title": "6.2.2.1 用于高斯输出分布的线性单元",
+    "content": "",
+    "color": "#AFCC3D",
+    "level": 1,
+    "chapter": 5
+  },
+  "n192": {
+    "title": "6.2.2.2 用于Bernoulli输出分布的sigmoid单元",
+    "content": "",
+    "color": "#AFCC3D",
+    "level": 1,
+    "chapter": 5
+  },
+  "n193": {
+    "title": "6.2.2.3 用于Multinoulli输出分布的softmax单元",
+    "content": "",
+    "color": "#AFCC3D",
+    "level": 1,
+    "chapter": 5
+  },
+  "n194": {
+    "title": "6.2.2.4 其他的输出类型",
+    "content": "",
+    "color": "#AFCC3D",
+    "level": 1,
+    "chapter": 5
+  },
+  "n195": {
+    "title": "6.3     隐藏单元",
+    "content": "",
+    "color": "#AFCC3D",
+    "level": 1,
+    "chapter": 5
+  },
+  "n196": {
+    "title": "6.3.1 整流线性单元及其扩展",
+    "content": "",
+    "color": "#AFCC3D",
+    "level": 1,
+    "chapter": 5
+  },
+  "n197": {
+    "title": "6.3.2 logistic sigmoid与双曲正切函数",
+    "content": "",
+    "color": "#AFCC3D",
+    "level": 1,
+    "chapter": 5
+  },
+  "n198": {
+    "title": "6.3.3 其他隐藏单元",
+    "content": "",
+    "color": "#AFCC3D",
+    "level": 1,
+    "chapter": 5
+  },
+  "n199": {
+    "title": "6.4   架构设计",
+    "content": "",
+    "color": "#AFCC3D",
+    "level": 1,
+    "chapter": 5
+  },
+  "n200": {
+    "title": "6.4.1 万能近似性质和深度",
+    "content": "",
+    "color": "#AFCC3D",
+    "level": 1,
+    "chapter": 5
+  },
+  "n201": {
+    "title": "6.7给出了一个对照实验，它说明了对模型尺寸其他方面的增加并不能产生相同的效果",
+    "content": "",
+    "color": "#AFCC3D",
+    "level": 1,
+    "chapter": 5
+  },
+  "n202": {
+    "title": "6.4.2 其他架构上的考虑",
+    "content": "",
+    "color": "#AFCC3D",
+    "level": 1,
+    "chapter": 5
+  },
+  "n203": {
+    "title": "6.5   反向传播和其他的微分算法",
+    "content": "",
+    "color": "#AFCC3D",
+    "level": 1,
+    "chapter": 5
+  },
+  "n204": {
+    "title": "6.5.1 计算图",
+    "content": "",
+    "color": "#AFCC3D",
+    "level": 1,
+    "chapter": 5
+  },
+  "n205": {
+    "title": "6.5.2 微积分中的链式法则",
+    "content": "",
+    "color": "#AFCC3D",
+    "level": 1,
+    "chapter": 5
+  },
+  "n206": {
+    "title": "6.5.3 递归地使用链式法则来实现反向传播",
+    "content": "",
+    "color": "#AFCC3D",
+    "level": 1,
+    "chapter": 5
+  },
+  "n207": {
+    "title": "6.5.4 全连接MLP中的反向传播计算",
+    "content": "",
+    "color": "#AFCC3D",
+    "level": 1,
+    "chapter": 5
+  },
+  "n208": {
+    "title": "6.5.5 符号到符号的导数",
+    "content": "",
+    "color": "#AFCC3D",
+    "level": 1,
+    "chapter": 5
+  },
+  "n209": {
+    "title": "6.5.8 复杂化",
+    "content": "",
+    "color": "#AFCC3D",
+    "level": 1,
+    "chapter": 5
+  },
+  "n210": {
+    "title": "6.5.10   高阶微分",
+    "content": "",
+    "color": "#AFCC3D",
+    "level": 1,
+    "chapter": 5
+  },
+  "n211": {
+    "title": "6.6   历史小记",
+    "content": "",
+    "color": "#AFCC3D",
+    "level": 1,
+    "chapter": 5
+  },
+  "n212": {
+    "title": "第8章      深度模型中的优化",
+    "content": "",
+    "color": "#8DCC3D",
+    "level": 0,
+    "chapter": 6
+  },
+  "n213": {
+    "title": "7.1     参数范数惩罚",
+    "content": "",
+    "color": "#8DCC3D",
+    "level": 1,
+    "chapter": 6
+  },
+  "n214": {
+    "title": "7.1.1   L 2 参数正则化",
+    "content": "",
+    "color": "#8DCC3D",
+    "level": 1,
+    "chapter": 6
+  },
+  "n215": {
+    "title": "7.1.2   L 1 正则化",
+    "content": "",
+    "color": "#8DCC3D",
+    "level": 1,
+    "chapter": 6
+  },
+  "n216": {
+    "title": "7.2     作为约束的范数惩罚",
+    "content": "",
+    "color": "#8DCC3D",
+    "level": 1,
+    "chapter": 6
+  },
+  "n217": {
+    "title": "7.3     正则化和欠约束问题",
+    "content": "",
+    "color": "#8DCC3D",
+    "level": 1,
+    "chapter": 6
+  },
+  "n218": {
+    "title": "7.4     数据集增强",
+    "content": "",
+    "color": "#8DCC3D",
+    "level": 1,
+    "chapter": 6
+  },
+  "n219": {
+    "title": "7.5     噪声鲁棒性",
+    "content": "",
+    "color": "#8DCC3D",
+    "level": 1,
+    "chapter": 6
+  },
+  "n220": {
+    "title": "7.5.1   向输出目标注入噪声",
+    "content": "",
+    "color": "#8DCC3D",
+    "level": 1,
+    "chapter": 6
+  },
+  "n221": {
+    "title": "7.7     多任务学习",
+    "content": "",
+    "color": "#8DCC3D",
+    "level": 1,
+    "chapter": 6
+  },
+  "n222": {
+    "title": "7.8     提前终止",
+    "content": "",
+    "color": "#8DCC3D",
+    "level": 1,
+    "chapter": 6
+  },
+  "n223": {
+    "title": "7.9     参数绑定和参数共享",
+    "content": "",
+    "color": "#8DCC3D",
+    "level": 1,
+    "chapter": 6
+  },
+  "n224": {
+    "title": "7.9.1   卷积神经网络",
+    "content": "",
+    "color": "#8DCC3D",
+    "level": 1,
+    "chapter": 6
+  },
+  "n225": {
+    "title": "7.10 稀疏表示",
+    "content": "",
+    "color": "#8DCC3D",
+    "level": 1,
+    "chapter": 6
+  },
+  "n226": {
+    "title": "7.11 Bagging和其他集成方法",
+    "content": "",
+    "color": "#8DCC3D",
+    "level": 1,
+    "chapter": 6
+  },
+  "n227": {
+    "title": "7.12 Dropout",
+    "content": "",
+    "color": "#8DCC3D",
+    "level": 1,
+    "chapter": 6
+  },
+  "n228": {
+    "title": "7.13 对抗训练",
+    "content": "",
+    "color": "#8DCC3D",
+    "level": 1,
+    "chapter": 6
+  },
+  "n229": {
+    "title": "7.14 切面距离、正切传播和流形正切分类器",
+    "content": "",
+    "color": "#8DCC3D",
+    "level": 1,
+    "chapter": 6
+  },
+  "n230": {
+    "title": "7.1   参数范数惩罚",
+    "content": "",
+    "color": "#8DCC3D",
+    "level": 1,
+    "chapter": 6
+  },
+  "n231": {
+    "title": "7.1.1 L 2 参数正则化",
+    "content": "",
+    "color": "#8DCC3D",
+    "level": 1,
+    "chapter": 6
+  },
+  "n232": {
+    "title": "7.1.2 L 1 正则化",
+    "content": "",
+    "color": "#8DCC3D",
+    "level": 1,
+    "chapter": 6
+  },
+  "n233": {
+    "title": "7.2   作为约束的范数惩罚",
+    "content": "",
+    "color": "#8DCC3D",
+    "level": 1,
+    "chapter": 6
+  },
+  "n234": {
+    "title": "7.3   正则化和欠约束问题",
+    "content": "",
+    "color": "#8DCC3D",
+    "level": 1,
+    "chapter": 6
+  },
+  "n235": {
+    "title": "7.4   数据集增强",
+    "content": "",
+    "color": "#8DCC3D",
+    "level": 1,
+    "chapter": 6
+  },
+  "n236": {
+    "title": "7.5   噪声鲁棒性",
+    "content": "",
+    "color": "#8DCC3D",
+    "level": 1,
+    "chapter": 6
+  },
+  "n237": {
+    "title": "7.5.1 向输出目标注入噪声",
+    "content": "",
+    "color": "#8DCC3D",
+    "level": 1,
+    "chapter": 6
+  },
+  "n238": {
+    "title": "7.6   半监督学习",
+    "content": "",
+    "color": "#8DCC3D",
+    "level": 1,
+    "chapter": 6
+  },
+  "n239": {
+    "title": "7.7   多任务学习",
+    "content": "",
+    "color": "#8DCC3D",
+    "level": 1,
+    "chapter": 6
+  },
+  "n240": {
+    "title": "7.8   提前终止",
+    "content": "",
+    "color": "#8DCC3D",
+    "level": 1,
+    "chapter": 6
+  },
+  "n241": {
+    "title": "7.3是这些现象的一个例子，这种现象几乎一定会出现。",
+    "content": "",
+    "color": "#8DCC3D",
+    "level": 1,
+    "chapter": 6
+  },
+  "n242": {
+    "title": "7.9   参数绑定和参数共享",
+    "content": "",
+    "color": "#8DCC3D",
+    "level": 1,
+    "chapter": 6
+  },
+  "n243": {
+    "title": "7.9.1 卷积神经网络",
+    "content": "",
+    "color": "#8DCC3D",
+    "level": 1,
+    "chapter": 6
+  },
+  "n244": {
+    "title": "7.10   稀疏表示",
+    "content": "",
+    "color": "#8DCC3D",
+    "level": 1,
+    "chapter": 6
+  },
+  "n245": {
+    "title": "7.11    Bagging和其他集成方法",
+    "content": "",
+    "color": "#8DCC3D",
+    "level": 1,
+    "chapter": 6
+  },
+  "n246": {
+    "title": "7.13   对抗训练",
+    "content": "",
+    "color": "#8DCC3D",
+    "level": 1,
+    "chapter": 6
+  },
+  "n247": {
+    "title": "7.14 切面距离、正切传播和流形正切分",
+    "content": "",
+    "color": "#8DCC3D",
+    "level": 1,
+    "chapter": 6
+  },
+  "n248": {
+    "title": "7.8节，在某些模型上，提前终止的梯度下降等价于权重衰减。在一般",
+    "content": "",
+    "color": "#8DCC3D",
+    "level": 1,
+    "chapter": 6
+  },
+  "n249": {
+    "title": "7.13节介绍的虚拟对抗训练。我们还可以在训练监督模型的同时训练自",
+    "content": "",
+    "color": "#8DCC3D",
+    "level": 1,
+    "chapter": 6
+  },
+  "n250": {
+    "title": "第9章      卷积网络",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 0,
+    "chapter": 7
+  },
+  "n251": {
+    "title": "8.1     学习和纯优化有什么不同",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n252": {
+    "title": "8.1.1   经验风险最小化",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n253": {
+    "title": "8.1.2   代理损失函数和提前终止",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n254": {
+    "title": "8.1.3   批量算法和小批量算法",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n255": {
+    "title": "8.2     神经网络优化中的挑战",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n256": {
+    "title": "8.2.1   病态",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n257": {
+    "title": "8.2.2   局部极小值",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n258": {
+    "title": "8.2.3   高原、鞍点和其他平坦区域",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n259": {
+    "title": "8.2.4   悬崖和梯度爆炸",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n260": {
+    "title": "8.2.6   非精确梯度",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n261": {
+    "title": "8.2.7   局部和全局结构间的弱对应",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n262": {
+    "title": "8.2.8   优化的理论限制",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n263": {
+    "title": "8.3     基本算法",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n264": {
+    "title": "8.3.1   随机梯度下降",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n265": {
+    "title": "8.3.2   动量",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n266": {
+    "title": "8.3.3   Nesterov动量",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n267": {
+    "title": "8.4     参数初始化策略",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n268": {
+    "title": "8.5     自适应学习率算法",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n269": {
+    "title": "8.5.1   AdaGrad",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n270": {
+    "title": "8.5.2   RMSProp",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n271": {
+    "title": "8.5.3   Adam",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n272": {
+    "title": "8.5.4   选择正确的优化算法",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n273": {
+    "title": "8.6     二阶近似方法",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n274": {
+    "title": "8.6.1   牛顿法",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n275": {
+    "title": "8.6.2   共轭梯度",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n276": {
+    "title": "8.6.3   BFGS",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n277": {
+    "title": "8.7     优化策略和元算法",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n278": {
+    "title": "8.7.1   批标准化",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n279": {
+    "title": "8.7.3   Polyak平均",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n280": {
+    "title": "8.7.4   监督预训练",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n281": {
+    "title": "8.7.5   设计有助于优化的模型",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n282": {
+    "title": "8.7.6   延拓法和课程学习",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n283": {
+    "title": "8.1     学习和纯优化有什么不同",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n284": {
+    "title": "8.1.1 经验风险最小化",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n285": {
+    "title": "8.1.2 代理损失函数和提前终止",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n286": {
+    "title": "8.1.3 批量算法和小批量算法",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n287": {
+    "title": "8.2     神经网络优化中的挑战",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n288": {
+    "title": "8.2.1   病态",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n289": {
+    "title": "8.2.3 高原、鞍点和其他平坦区域",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n290": {
+    "title": "8.2.4 悬崖和梯度爆炸",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n291": {
+    "title": "8.2.5 长期依赖",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n292": {
+    "title": "8.2.6   非精确梯度",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n293": {
+    "title": "8.2.7 局部和全局结构间的弱对应",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n294": {
+    "title": "8.2.8 优化的理论限制",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n295": {
+    "title": "8.3   基本算法",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n296": {
+    "title": "8.3.1 随机梯度下降",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n297": {
+    "title": "8.3.2   动量",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n298": {
+    "title": "8.3.3 Nesterov动量",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n299": {
+    "title": "8.4     参数初始化策略",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n300": {
+    "title": "8.5   自适应学习率算法",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n301": {
+    "title": "8.5.1 AdaGrad",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n302": {
+    "title": "8.5.2 RMSProp",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n303": {
+    "title": "8.5.3 Adam",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n304": {
+    "title": "8.5.4 选择正确的优化算法",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n305": {
+    "title": "8.6     二阶近似方法",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n306": {
+    "title": "8.6.1 牛顿法",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n307": {
+    "title": "8.6.2 共轭梯度",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n308": {
+    "title": "8.6.3   BFGS",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n309": {
+    "title": "8.7   优化策略和元算法",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n310": {
+    "title": "8.7.1 批标准化",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n311": {
+    "title": "8.7.2   坐标下降",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n312": {
+    "title": "8.7.3 Polyak平均",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n313": {
+    "title": "8.7.4 监督预训练",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n314": {
+    "title": "8.7.5 设计有助于优化的模型",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n315": {
+    "title": "8.7.6 延拓法和课程学习",
+    "content": "",
+    "color": "#6ACC3D",
+    "level": 1,
+    "chapter": 7
+  },
+  "n316": {
+    "title": "第10章 序列建模：循环和递归网络",
+    "content": "",
+    "color": "#48CC3D",
+    "level": 0,
+    "chapter": 8
+  },
+  "n317": {
+    "title": "9.1     卷积运算",
+    "content": "",
+    "color": "#48CC3D",
+    "level": 1,
+    "chapter": 8
+  },
+  "n318": {
+    "title": "9.2     动机",
+    "content": "",
+    "color": "#48CC3D",
+    "level": 1,
+    "chapter": 8
+  },
+  "n319": {
+    "title": "9.3     池化",
+    "content": "",
+    "color": "#48CC3D",
+    "level": 1,
+    "chapter": 8
+  },
+  "n320": {
+    "title": "9.4     卷积与池化作为一种无限强的先验",
+    "content": "",
+    "color": "#48CC3D",
+    "level": 1,
+    "chapter": 8
+  },
+  "n321": {
+    "title": "9.5     基本卷积函数的变体",
+    "content": "",
+    "color": "#48CC3D",
+    "level": 1,
+    "chapter": 8
+  },
+  "n322": {
+    "title": "9.6     结构化输出",
+    "content": "",
+    "color": "#48CC3D",
+    "level": 1,
+    "chapter": 8
+  },
+  "n323": {
+    "title": "9.7     数据类型",
+    "content": "",
+    "color": "#48CC3D",
+    "level": 1,
+    "chapter": 8
+  },
+  "n324": {
+    "title": "9.8     高效的卷积算法",
+    "content": "",
+    "color": "#48CC3D",
+    "level": 1,
+    "chapter": 8
+  },
+  "n325": {
+    "title": "9.9     随机或无监督的特征",
+    "content": "",
+    "color": "#48CC3D",
+    "level": 1,
+    "chapter": 8
+  },
+  "n326": {
+    "title": "9.10 卷积网络的神经科学基础",
+    "content": "",
+    "color": "#48CC3D",
+    "level": 1,
+    "chapter": 8
+  },
+  "n327": {
+    "title": "9.11 卷积网络与深度学习的历史",
+    "content": "",
+    "color": "#48CC3D",
+    "level": 1,
+    "chapter": 8
+  },
+  "n328": {
+    "title": "9.1   卷积运算",
+    "content": "",
+    "color": "#48CC3D",
+    "level": 1,
+    "chapter": 8
+  },
+  "n329": {
+    "title": "9.4所示。这允许网络可以通过只描述稀疏交互的基石来高效地描述多",
+    "content": "",
+    "color": "#48CC3D",
+    "level": 1,
+    "chapter": 8
+  },
+  "n330": {
+    "title": "9.9）。",
+    "content": "",
+    "color": "#48CC3D",
+    "level": 1,
+    "chapter": 8
+  },
+  "n331": {
+    "title": "9.4   卷积与池化作为一种无限强的先验",
+    "content": "",
+    "color": "#48CC3D",
+    "level": 1,
+    "chapter": 8
+  },
+  "n332": {
+    "title": "9.5   基本卷积函数的变体",
+    "content": "",
+    "color": "#48CC3D",
+    "level": 1,
+    "chapter": 8
+  },
+  "n333": {
+    "title": "9.6   结构化输出",
+    "content": "",
+    "color": "#48CC3D",
+    "level": 1,
+    "chapter": 8
+  },
+  "n334": {
+    "title": "9.7    数据类型",
+    "content": "",
+    "color": "#48CC3D",
+    "level": 1,
+    "chapter": 8
+  },
+  "n335": {
+    "title": "9.11。",
+    "content": "",
+    "color": "#48CC3D",
+    "level": 1,
+    "chapter": 8
+  },
+  "n336": {
+    "title": "9.8   高效的卷积算法",
+    "content": "",
+    "color": "#48CC3D",
+    "level": 1,
+    "chapter": 8
+  },
+  "n337": {
+    "title": "9.9   随机或无监督的特征",
+    "content": "",
+    "color": "#48CC3D",
+    "level": 1,
+    "chapter": 8
+  },
+  "n338": {
+    "title": "9.11   卷积网络与深度学习的历史",
+    "content": "",
+    "color": "#48CC3D",
+    "level": 1,
+    "chapter": 8
+  },
+  "n339": {
+    "title": "第11章 实践方法论",
+    "content": "",
+    "color": "#3DCC54",
+    "level": 0,
+    "chapter": 9
+  },
+  "n340": {
+    "title": "10.1 展开计算图",
+    "content": "",
+    "color": "#3DCC54",
+    "level": 1,
+    "chapter": 9
+  },
+  "n341": {
+    "title": "10.2 循环神经网络",
+    "content": "",
+    "color": "#3DCC54",
+    "level": 1,
+    "chapter": 9
+  },
+  "n342": {
+    "title": "10.2.2 计算循环神经网络的梯度",
+    "content": "",
+    "color": "#3DCC54",
+    "level": 1,
+    "chapter": 9
+  },
+  "n343": {
+    "title": "10.2.3 作为有向图模型的循环网络",
+    "content": "",
+    "color": "#3DCC54",
+    "level": 1,
+    "chapter": 9
+  },
+  "n344": {
+    "title": "10.2.4 基于上下文的RNN序列建模",
+    "content": "",
+    "color": "#3DCC54",
+    "level": 1,
+    "chapter": 9
+  },
+  "n345": {
+    "title": "10.3 双向RNN",
+    "content": "",
+    "color": "#3DCC54",
+    "level": 1,
+    "chapter": 9
+  },
+  "n346": {
+    "title": "10.4 基于编码-解码的序列到序列架构",
+    "content": "",
+    "color": "#3DCC54",
+    "level": 1,
+    "chapter": 9
+  },
+  "n347": {
+    "title": "10.5 深度循环网络",
+    "content": "",
+    "color": "#3DCC54",
+    "level": 1,
+    "chapter": 9
+  },
+  "n348": {
+    "title": "10.6 递归神经网络",
+    "content": "",
+    "color": "#3DCC54",
+    "level": 1,
+    "chapter": 9
+  },
+  "n349": {
+    "title": "10.7 长期依赖的挑战",
+    "content": "",
+    "color": "#3DCC54",
+    "level": 1,
+    "chapter": 9
+  },
+  "n350": {
+    "title": "10.8 回声状态网络",
+    "content": "",
+    "color": "#3DCC54",
+    "level": 1,
+    "chapter": 9
+  },
+  "n351": {
+    "title": "10.9 渗漏单元和其他多时间尺度的策略",
+    "content": "",
+    "color": "#3DCC54",
+    "level": 1,
+    "chapter": 9
+  },
+  "n352": {
+    "title": "10.9.1 时间维度的跳跃连接",
+    "content": "",
+    "color": "#3DCC54",
+    "level": 1,
+    "chapter": 9
+  },
+  "n353": {
+    "title": "10.9.2 渗漏单元和一系列不同时间尺度",
+    "content": "",
+    "color": "#3DCC54",
+    "level": 1,
+    "chapter": 9
+  },
+  "n354": {
+    "title": "10.9.3 删除连接",
+    "content": "",
+    "color": "#3DCC54",
+    "level": 1,
+    "chapter": 9
+  },
+  "n355": {
+    "title": "10.10   长短期记忆和其他门控RNN",
+    "content": "",
+    "color": "#3DCC54",
+    "level": 1,
+    "chapter": 9
+  },
+  "n356": {
+    "title": "10.10.1 LSTM",
+    "content": "",
+    "color": "#3DCC54",
+    "level": 1,
+    "chapter": 9
+  },
+  "n357": {
+    "title": "10.10.2 其他门控RNN",
+    "content": "",
+    "color": "#3DCC54",
+    "level": 1,
+    "chapter": 9
+  },
+  "n358": {
+    "title": "10.11   优化长期依赖",
+    "content": "",
+    "color": "#3DCC54",
+    "level": 1,
+    "chapter": 9
+  },
+  "n359": {
+    "title": "10.11.1 截断梯度",
+    "content": "",
+    "color": "#3DCC54",
+    "level": 1,
+    "chapter": 9
+  },
+  "n360": {
+    "title": "10.11.2 引导信息流的正则化",
+    "content": "",
+    "color": "#3DCC54",
+    "level": 1,
+    "chapter": 9
+  },
+  "n361": {
+    "title": "10.10节中进一步讨论。",
+    "content": "",
+    "color": "#3DCC54",
+    "level": 1,
+    "chapter": 9
+  },
+  "n362": {
+    "title": "10.1   展开计算图",
+    "content": "",
+    "color": "#3DCC54",
+    "level": 1,
+    "chapter": 9
+  },
+  "n363": {
+    "title": "10.2      循环神经网络",
+    "content": "",
+    "color": "#3DCC54",
+    "level": 1,
+    "chapter": 9
+  },
+  "n364": {
+    "title": "10.2.2   计算循环神经网络的梯度",
+    "content": "",
+    "color": "#3DCC54",
+    "level": 1,
+    "chapter": 9
+  },
+  "n365": {
+    "title": "10.2.3   作为有向图模型的循环网络",
+    "content": "",
+    "color": "#3DCC54",
+    "level": 1,
+    "chapter": 9
+  },
+  "n366": {
+    "title": "10.2.4   基于上下文的RNN序列建模",
+    "content": "",
+    "color": "#3DCC54",
+    "level": 1,
+    "chapter": 9
+  },
+  "n367": {
+    "title": "10.3      双向RNN",
+    "content": "",
+    "color": "#3DCC54",
+    "level": 1,
+    "chapter": 9
+  },
+  "n368": {
+    "title": "10.4    基于编码-解码的序列到序列架构",
+    "content": "",
+    "color": "#3DCC54",
+    "level": 1,
+    "chapter": 9
+  },
+  "n369": {
+    "title": "10.12所示。这个想法非常简单：（1）编码器              （encoder）或读取器",
+    "content": "",
+    "color": "#3DCC54",
+    "level": 1,
+    "chapter": 9
+  },
+  "n370": {
+    "title": "10.9）为条件产生输出序列                      。这种架构对比本章",
+    "content": "",
+    "color": "#3DCC54",
+    "level": 1,
+    "chapter": 9
+  },
+  "n371": {
+    "title": "10.5   深度循环网络",
+    "content": "",
+    "color": "#3DCC54",
+    "level": 1,
+    "chapter": 9
+  },
+  "n372": {
+    "title": "10.6   递归神经网络",
+    "content": "",
+    "color": "#3DCC54",
+    "level": 1,
+    "chapter": 9
+  },
+  "n373": {
+    "title": "10.7    长期依赖的挑战",
+    "content": "",
+    "color": "#3DCC54",
+    "level": 1,
+    "chapter": 9
+  },
+  "n374": {
+    "title": "10.8    回声状态网络",
+    "content": "",
+    "color": "#3DCC54",
+    "level": 1,
+    "chapter": 9
+  },
+  "n375": {
+    "title": "10.9   渗漏单元和其他多时间尺度的策略",
+    "content": "",
+    "color": "#3DCC54",
+    "level": 1,
+    "chapter": 9
+  },
+  "n376": {
+    "title": "10.9.1   时间维度的跳跃连接",
+    "content": "",
+    "color": "#3DCC54",
+    "level": 1,
+    "chapter": 9
+  },
+  "n377": {
+    "title": "10.9.2   渗漏单元和一系列不同时间尺度",
+    "content": "",
+    "color": "#3DCC54",
+    "level": 1,
+    "chapter": 9
+  },
+  "n378": {
+    "title": "10.9.3   删除连接",
+    "content": "",
+    "color": "#3DCC54",
+    "level": 1,
+    "chapter": 9
+  },
+  "n379": {
+    "title": "10.10    长短期记忆和其他门控RNN",
+    "content": "",
+    "color": "#3DCC54",
+    "level": 1,
+    "chapter": 9
+  },
+  "n380": {
+    "title": "10.10.1   LSTM",
+    "content": "",
+    "color": "#3DCC54",
+    "level": 1,
+    "chapter": 9
+  },
+  "n381": {
+    "title": "10.10.2   其他门控RNN",
+    "content": "",
+    "color": "#3DCC54",
+    "level": 1,
+    "chapter": 9
+  },
+  "n382": {
+    "title": "10.11   优化长期依赖",
+    "content": "",
+    "color": "#3DCC54",
+    "level": 1,
+    "chapter": 9
+  },
+  "n383": {
+    "title": "10.11.1   截断梯度",
+    "content": "",
+    "color": "#3DCC54",
+    "level": 1,
+    "chapter": 9
+  },
+  "n384": {
+    "title": "10.12     外显记忆",
+    "content": "",
+    "color": "#3DCC54",
+    "level": 1,
+    "chapter": 9
+  },
+  "n385": {
+    "title": "第12章 应用",
+    "content": "",
+    "color": "#3DCC76",
+    "level": 0,
+    "chapter": 10
+  },
+  "n386": {
+    "title": "11.1 性能度量",
+    "content": "",
+    "color": "#3DCC76",
+    "level": 1,
+    "chapter": 10
+  },
+  "n387": {
+    "title": "11.2 默认的基准模型",
+    "content": "",
+    "color": "#3DCC76",
+    "level": 1,
+    "chapter": 10
+  },
+  "n388": {
+    "title": "11.3 决定是否收集更多数据",
+    "content": "",
+    "color": "#3DCC76",
+    "level": 1,
+    "chapter": 10
+  },
+  "n389": {
+    "title": "11.4 选择超参数",
+    "content": "",
+    "color": "#3DCC76",
+    "level": 1,
+    "chapter": 10
+  },
+  "n390": {
+    "title": "11.4.1 手动调整超参数",
+    "content": "",
+    "color": "#3DCC76",
+    "level": 1,
+    "chapter": 10
+  },
+  "n391": {
+    "title": "11.4.2 自动超参数优化算法",
+    "content": "",
+    "color": "#3DCC76",
+    "level": 1,
+    "chapter": 10
+  },
+  "n392": {
+    "title": "11.4.3 网格搜索",
+    "content": "",
+    "color": "#3DCC76",
+    "level": 1,
+    "chapter": 10
+  },
+  "n393": {
+    "title": "11.4.4 随机搜索",
+    "content": "",
+    "color": "#3DCC76",
+    "level": 1,
+    "chapter": 10
+  },
+  "n394": {
+    "title": "11.4.5 基于模型的超参数优化",
+    "content": "",
+    "color": "#3DCC76",
+    "level": 1,
+    "chapter": 10
+  },
+  "n395": {
+    "title": "11.5 调试策略",
+    "content": "",
+    "color": "#3DCC76",
+    "level": 1,
+    "chapter": 10
+  },
+  "n396": {
+    "title": "11.6 示例：多位数字识别",
+    "content": "",
+    "color": "#3DCC76",
+    "level": 1,
+    "chapter": 10
+  },
+  "n397": {
+    "title": "11.1   性能度量",
+    "content": "",
+    "color": "#3DCC76",
+    "level": 1,
+    "chapter": 10
+  },
+  "n398": {
+    "title": "11.2   默认的基准模型",
+    "content": "",
+    "color": "#3DCC76",
+    "level": 1,
+    "chapter": 10
+  },
+  "n399": {
+    "title": "11.4     选择超参数",
+    "content": "",
+    "color": "#3DCC76",
+    "level": 1,
+    "chapter": 10
+  },
+  "n400": {
+    "title": "11.4.1   手动调整超参数",
+    "content": "",
+    "color": "#3DCC76",
+    "level": 1,
+    "chapter": 10
+  },
+  "n401": {
+    "title": "11.4.2   自动超参数优化算法",
+    "content": "",
+    "color": "#3DCC76",
+    "level": 1,
+    "chapter": 10
+  },
+  "n402": {
+    "title": "11.4.3   网格搜索",
+    "content": "",
+    "color": "#3DCC76",
+    "level": 1,
+    "chapter": 10
+  },
+  "n403": {
+    "title": "11.4.4   随机搜索",
+    "content": "",
+    "color": "#3DCC76",
+    "level": 1,
+    "chapter": 10
+  },
+  "n404": {
+    "title": "11.4.5   基于模型的超参数优化",
+    "content": "",
+    "color": "#3DCC76",
+    "level": 1,
+    "chapter": 10
+  },
+  "n405": {
+    "title": "11.5   调试策略",
+    "content": "",
+    "color": "#3DCC76",
+    "level": 1,
+    "chapter": 10
+  },
+  "n406": {
+    "title": "11.6   示例：多位数字识别",
+    "content": "",
+    "color": "#3DCC76",
+    "level": 1,
+    "chapter": 10
+  },
+  "n407": {
+    "title": "第13章 线性因子模型",
+    "content": "",
+    "color": "#3DCC98",
+    "level": 0,
+    "chapter": 11
+  },
+  "n408": {
+    "title": "12.1 大规模深度学习",
+    "content": "",
+    "color": "#3DCC98",
+    "level": 1,
+    "chapter": 11
+  },
+  "n409": {
+    "title": "12.1.1 快速的CPU实现",
+    "content": "",
+    "color": "#3DCC98",
+    "level": 1,
+    "chapter": 11
+  },
+  "n410": {
+    "title": "12.1.2 GPU实现",
+    "content": "",
+    "color": "#3DCC98",
+    "level": 1,
+    "chapter": 11
+  },
+  "n411": {
+    "title": "12.1.3 大规模的分布式实现",
+    "content": "",
+    "color": "#3DCC98",
+    "level": 1,
+    "chapter": 11
+  },
+  "n412": {
+    "title": "12.1.4 模型压缩",
+    "content": "",
+    "color": "#3DCC98",
+    "level": 1,
+    "chapter": 11
+  },
+  "n413": {
+    "title": "12.1.5 动态结构",
+    "content": "",
+    "color": "#3DCC98",
+    "level": 1,
+    "chapter": 11
+  },
+  "n414": {
+    "title": "12.2 计算机视觉",
+    "content": "",
+    "color": "#3DCC98",
+    "level": 1,
+    "chapter": 11
+  },
+  "n415": {
+    "title": "12.2.1 预处理",
+    "content": "",
+    "color": "#3DCC98",
+    "level": 1,
+    "chapter": 11
+  },
+  "n416": {
+    "title": "12.2.2 数据集增强",
+    "content": "",
+    "color": "#3DCC98",
+    "level": 1,
+    "chapter": 11
+  },
+  "n417": {
+    "title": "12.3 语音识别",
+    "content": "",
+    "color": "#3DCC98",
+    "level": 1,
+    "chapter": 11
+  },
+  "n418": {
+    "title": "12.4 自然语言处理",
+    "content": "",
+    "color": "#3DCC98",
+    "level": 1,
+    "chapter": 11
+  },
+  "n419": {
+    "title": "12.4.1 n-gram",
+    "content": "",
+    "color": "#3DCC98",
+    "level": 1,
+    "chapter": 11
+  },
+  "n420": {
+    "title": "12.4.2 神经语言模型",
+    "content": "",
+    "color": "#3DCC98",
+    "level": 1,
+    "chapter": 11
+  },
+  "n421": {
+    "title": "12.4.3 高维输出",
+    "content": "",
+    "color": "#3DCC98",
+    "level": 1,
+    "chapter": 11
+  },
+  "n422": {
+    "title": "12.4.4 结合n-gram和神经语言模型",
+    "content": "",
+    "color": "#3DCC98",
+    "level": 1,
+    "chapter": 11
+  },
+  "n423": {
+    "title": "12.4.5 神经机器翻译",
+    "content": "",
+    "color": "#3DCC98",
+    "level": 1,
+    "chapter": 11
+  },
+  "n424": {
+    "title": "12.4.6 历史展望",
+    "content": "",
+    "color": "#3DCC98",
+    "level": 1,
+    "chapter": 11
+  },
+  "n425": {
+    "title": "12.5 其他应用",
+    "content": "",
+    "color": "#3DCC98",
+    "level": 1,
+    "chapter": 11
+  },
+  "n426": {
+    "title": "12.5.1 推荐系统",
+    "content": "",
+    "color": "#3DCC98",
+    "level": 1,
+    "chapter": 11
+  },
+  "n427": {
+    "title": "12.5.2 知识表示、推理和回答",
+    "content": "",
+    "color": "#3DCC98",
+    "level": 1,
+    "chapter": 11
+  },
+  "n428": {
+    "title": "12.1.3节中进一步讨论。",
+    "content": "",
+    "color": "#3DCC98",
+    "level": 1,
+    "chapter": 11
+  },
+  "n429": {
+    "title": "12.1   大规模深度学习",
+    "content": "",
+    "color": "#3DCC98",
+    "level": 1,
+    "chapter": 11
+  },
+  "n430": {
+    "title": "12.1.1   快速的CPU实现",
+    "content": "",
+    "color": "#3DCC98",
+    "level": 1,
+    "chapter": 11
+  },
+  "n431": {
+    "title": "12.1.2   GPU实现",
+    "content": "",
+    "color": "#3DCC98",
+    "level": 1,
+    "chapter": 11
+  },
+  "n432": {
+    "title": "12.1.3   大规模的分布式实现",
+    "content": "",
+    "color": "#3DCC98",
+    "level": 1,
+    "chapter": 11
+  },
+  "n433": {
+    "title": "12.1.4   模型压缩",
+    "content": "",
+    "color": "#3DCC98",
+    "level": 1,
+    "chapter": 11
+  },
+  "n434": {
+    "title": "12.1.5   动态结构",
+    "content": "",
+    "color": "#3DCC98",
+    "level": 1,
+    "chapter": 11
+  },
+  "n435": {
+    "title": "12.2     计算机视觉",
+    "content": "",
+    "color": "#3DCC98",
+    "level": 1,
+    "chapter": 11
+  },
+  "n436": {
+    "title": "12.2.1   预处理",
+    "content": "",
+    "color": "#3DCC98",
+    "level": 1,
+    "chapter": 11
+  },
+  "n437": {
+    "title": "12.2.1.1   对比度归一化",
+    "content": "",
+    "color": "#3DCC98",
+    "level": 1,
+    "chapter": 11
+  },
+  "n438": {
+    "title": "12.2.2   数据集增强",
+    "content": "",
+    "color": "#3DCC98",
+    "level": 1,
+    "chapter": 11
+  },
+  "n439": {
+    "title": "12.3     语音识别",
+    "content": "",
+    "color": "#3DCC98",
+    "level": 1,
+    "chapter": 11
+  },
+  "n440": {
+    "title": "12.4.1   n-gram",
+    "content": "",
+    "color": "#3DCC98",
+    "level": 1,
+    "chapter": 11
+  },
+  "n441": {
+    "title": "12.4.2   神经语言模型",
+    "content": "",
+    "color": "#3DCC98",
+    "level": 1,
+    "chapter": 11
+  },
+  "n442": {
+    "title": "12.4.3     高维输出",
+    "content": "",
+    "color": "#3DCC98",
+    "level": 1,
+    "chapter": 11
+  },
+  "n443": {
+    "title": "12.4.3.1   使用短列表",
+    "content": "",
+    "color": "#3DCC98",
+    "level": 1,
+    "chapter": 11
+  },
+  "n444": {
+    "title": "12.4.3.2   分层Softmax",
+    "content": "",
+    "color": "#3DCC98",
+    "level": 1,
+    "chapter": 11
+  },
+  "n445": {
+    "title": "12.4.3.3   重要采样",
+    "content": "",
+    "color": "#3DCC98",
+    "level": 1,
+    "chapter": 11
+  },
+  "n446": {
+    "title": "12.4.3.4   噪声对比估计和排名损失",
+    "content": "",
+    "color": "#3DCC98",
+    "level": 1,
+    "chapter": 11
+  },
+  "n447": {
+    "title": "12.4.4   结合n-gram和神经语言模型",
+    "content": "",
+    "color": "#3DCC98",
+    "level": 1,
+    "chapter": 11
+  },
+  "n448": {
+    "title": "12.4.5   神经机器翻译",
+    "content": "",
+    "color": "#3DCC98",
+    "level": 1,
+    "chapter": 11
+  },
+  "n449": {
+    "title": "12.4.5.1   使用注意力机制并对齐数据片段",
+    "content": "",
+    "color": "#3DCC98",
+    "level": 1,
+    "chapter": 11
+  },
+  "n450": {
+    "title": "12.4.6   历史展望",
+    "content": "",
+    "color": "#3DCC98",
+    "level": 1,
+    "chapter": 11
+  },
+  "n451": {
+    "title": "12.5     其他应用",
+    "content": "",
+    "color": "#3DCC98",
+    "level": 1,
+    "chapter": 11
+  },
+  "n452": {
+    "title": "12.5.1   推荐系统",
+    "content": "",
+    "color": "#3DCC98",
+    "level": 1,
+    "chapter": 11
+  },
+  "n453": {
+    "title": "12.5.2     知识表示、推理和回答",
+    "content": "",
+    "color": "#3DCC98",
+    "level": 1,
+    "chapter": 11
+  },
+  "n454": {
+    "title": "12.5.2.1   知识、联系和回答",
+    "content": "",
+    "color": "#3DCC98",
+    "level": 1,
+    "chapter": 11
+  },
+  "n455": {
+    "title": "第14章 自编码器",
+    "content": "",
+    "color": "#3DCCBA",
+    "level": 0,
+    "chapter": 12
+  },
+  "n456": {
+    "title": "13.1 概率PCA和因子分析",
+    "content": "",
+    "color": "#3DCCBA",
+    "level": 1,
+    "chapter": 12
+  },
+  "n457": {
+    "title": "13.2 独立成分分析",
+    "content": "",
+    "color": "#3DCCBA",
+    "level": 1,
+    "chapter": 12
+  },
+  "n458": {
+    "title": "13.3 慢特征分析",
+    "content": "",
+    "color": "#3DCCBA",
+    "level": 1,
+    "chapter": 12
+  },
+  "n459": {
+    "title": "13.5 PCA的流形解释",
+    "content": "",
+    "color": "#3DCCBA",
+    "level": 1,
+    "chapter": 12
+  },
+  "n460": {
+    "title": "13.1      概率PCA和因子分析",
+    "content": "",
+    "color": "#3DCCBA",
+    "level": 1,
+    "chapter": 12
+  },
+  "n461": {
+    "title": "13.2    独立成分分析",
+    "content": "",
+    "color": "#3DCCBA",
+    "level": 1,
+    "chapter": 12
+  },
+  "n462": {
+    "title": "13.3    慢特征分析",
+    "content": "",
+    "color": "#3DCCBA",
+    "level": 1,
+    "chapter": 12
+  },
+  "n463": {
+    "title": "13.4   稀疏编码",
+    "content": "",
+    "color": "#3DCCBA",
+    "level": 1,
+    "chapter": 12
+  },
+  "n464": {
+    "title": "13.5       PCA的流形解释",
+    "content": "",
+    "color": "#3DCCBA",
+    "level": 1,
+    "chapter": 12
+  },
+  "n465": {
+    "title": "第15章 表示学习",
+    "content": "",
+    "color": "#3DBACC",
+    "level": 0,
+    "chapter": 13
+  },
+  "n466": {
+    "title": "14.1 欠完备自编码器",
+    "content": "",
+    "color": "#3DBACC",
+    "level": 1,
+    "chapter": 13
+  },
+  "n467": {
+    "title": "14.2 正则自编码器",
+    "content": "",
+    "color": "#3DBACC",
+    "level": 1,
+    "chapter": 13
+  },
+  "n468": {
+    "title": "14.2.1 稀疏自编码器",
+    "content": "",
+    "color": "#3DBACC",
+    "level": 1,
+    "chapter": 13
+  },
+  "n469": {
+    "title": "14.2.2 去噪自编码器",
+    "content": "",
+    "color": "#3DBACC",
+    "level": 1,
+    "chapter": 13
+  },
+  "n470": {
+    "title": "14.2.3 惩罚导数作为正则",
+    "content": "",
+    "color": "#3DBACC",
+    "level": 1,
+    "chapter": 13
+  },
+  "n471": {
+    "title": "14.3 表示能力、层的大小和深度",
+    "content": "",
+    "color": "#3DBACC",
+    "level": 1,
+    "chapter": 13
+  },
+  "n472": {
+    "title": "14.4 随机编码器和解码器",
+    "content": "",
+    "color": "#3DBACC",
+    "level": 1,
+    "chapter": 13
+  },
+  "n473": {
+    "title": "14.5 去噪自编码器详解",
+    "content": "",
+    "color": "#3DBACC",
+    "level": 1,
+    "chapter": 13
+  },
+  "n474": {
+    "title": "14.5.1 得分估计",
+    "content": "",
+    "color": "#3DBACC",
+    "level": 1,
+    "chapter": 13
+  },
+  "n475": {
+    "title": "14.5.2 历史展望",
+    "content": "",
+    "color": "#3DBACC",
+    "level": 1,
+    "chapter": 13
+  },
+  "n476": {
+    "title": "14.6 使用自编码器学习流形",
+    "content": "",
+    "color": "#3DBACC",
+    "level": 1,
+    "chapter": 13
+  },
+  "n477": {
+    "title": "14.7 收缩自编码器",
+    "content": "",
+    "color": "#3DBACC",
+    "level": 1,
+    "chapter": 13
+  },
+  "n478": {
+    "title": "14.8 预测稀疏分解",
+    "content": "",
+    "color": "#3DBACC",
+    "level": 1,
+    "chapter": 13
+  },
+  "n479": {
+    "title": "14.9 自编码器的应用",
+    "content": "",
+    "color": "#3DBACC",
+    "level": 1,
+    "chapter": 13
+  },
+  "n480": {
+    "title": "14.1      欠完备自编码器",
+    "content": "",
+    "color": "#3DBACC",
+    "level": 1,
+    "chapter": 13
+  },
+  "n481": {
+    "title": "14.2   正则自编码器",
+    "content": "",
+    "color": "#3DBACC",
+    "level": 1,
+    "chapter": 13
+  },
+  "n482": {
+    "title": "14.2.1   稀疏自编码器",
+    "content": "",
+    "color": "#3DBACC",
+    "level": 1,
+    "chapter": 13
+  },
+  "n483": {
+    "title": "14.2.2   去噪自编码器",
+    "content": "",
+    "color": "#3DBACC",
+    "level": 1,
+    "chapter": 13
+  },
+  "n484": {
+    "title": "14.2.3   惩罚导数作为正则",
+    "content": "",
+    "color": "#3DBACC",
+    "level": 1,
+    "chapter": 13
+  },
+  "n485": {
+    "title": "14.3   表示能力、层的大小和深度",
+    "content": "",
+    "color": "#3DBACC",
+    "level": 1,
+    "chapter": 13
+  },
+  "n486": {
+    "title": "14.4    随机编码器和解码器",
+    "content": "",
+    "color": "#3DBACC",
+    "level": 1,
+    "chapter": 13
+  },
+  "n487": {
+    "title": "14.5        去噪自编码器详解",
+    "content": "",
+    "color": "#3DBACC",
+    "level": 1,
+    "chapter": 13
+  },
+  "n488": {
+    "title": "14.5.1    得分估计",
+    "content": "",
+    "color": "#3DBACC",
+    "level": 1,
+    "chapter": 13
+  },
+  "n489": {
+    "title": "14.5.2   历史展望",
+    "content": "",
+    "color": "#3DBACC",
+    "level": 1,
+    "chapter": 13
+  },
+  "n490": {
+    "title": "14.6   使用自编码器学习流形",
+    "content": "",
+    "color": "#3DBACC",
+    "level": 1,
+    "chapter": 13
+  },
+  "n491": {
+    "title": "14.7    收缩自编码器",
+    "content": "",
+    "color": "#3DBACC",
+    "level": 1,
+    "chapter": 13
+  },
+  "n492": {
+    "title": "14.8    预测稀疏分解",
+    "content": "",
+    "color": "#3DBACC",
+    "level": 1,
+    "chapter": 13
+  },
+  "n493": {
+    "title": "14.9    自编码器的应用",
+    "content": "",
+    "color": "#3DBACC",
+    "level": 1,
+    "chapter": 13
+  },
+  "n494": {
+    "title": "第16章 深度学习中的结构化概率模型",
+    "content": "",
+    "color": "#3D98CC",
+    "level": 0,
+    "chapter": 14
+  },
+  "n495": {
+    "title": "15.1 贪心逐层无监督预训练",
+    "content": "",
+    "color": "#3D98CC",
+    "level": 1,
+    "chapter": 14
+  },
+  "n496": {
+    "title": "15.1.1 何时以及为何无监督预训练有效有效",
+    "content": "",
+    "color": "#3D98CC",
+    "level": 1,
+    "chapter": 14
+  },
+  "n497": {
+    "title": "15.3 半监督解释因果关系",
+    "content": "",
+    "color": "#3D98CC",
+    "level": 1,
+    "chapter": 14
+  },
+  "n498": {
+    "title": "15.4 分布式表示",
+    "content": "",
+    "color": "#3D98CC",
+    "level": 1,
+    "chapter": 14
+  },
+  "n499": {
+    "title": "15.5 得益于深度的指数增益",
+    "content": "",
+    "color": "#3D98CC",
+    "level": 1,
+    "chapter": 14
+  },
+  "n500": {
+    "title": "15.6 提供发现潜在原因的线索",
+    "content": "",
+    "color": "#3D98CC",
+    "level": 1,
+    "chapter": 14
+  },
+  "n501": {
+    "title": "15.1    贪心逐层无监督预训练",
+    "content": "",
+    "color": "#3D98CC",
+    "level": 1,
+    "chapter": 14
+  },
+  "n502": {
+    "title": "15.1.1   何时以及为何无监督预训练有效有效",
+    "content": "",
+    "color": "#3D98CC",
+    "level": 1,
+    "chapter": 14
+  },
+  "n503": {
+    "title": "15.2     迁移学习和领域自适应",
+    "content": "",
+    "color": "#3D98CC",
+    "level": 1,
+    "chapter": 14
+  },
+  "n504": {
+    "title": "15.3      半监督解释因果关系",
+    "content": "",
+    "color": "#3D98CC",
+    "level": 1,
+    "chapter": 14
+  },
+  "n505": {
+    "title": "15.4      分布式表示",
+    "content": "",
+    "color": "#3D98CC",
+    "level": 1,
+    "chapter": 14
+  },
+  "n506": {
+    "title": "15.5        得益于深度的指数增益",
+    "content": "",
+    "color": "#3D98CC",
+    "level": 1,
+    "chapter": 14
+  },
+  "n507": {
+    "title": "15.6   提供发现潜在原因的线索",
+    "content": "",
+    "color": "#3D98CC",
+    "level": 1,
+    "chapter": 14
+  },
+  "n508": {
+    "title": "第17章 蒙特卡罗方法",
+    "content": "",
+    "color": "#3D76CC",
+    "level": 0,
+    "chapter": 15
+  },
+  "n509": {
+    "title": "16.1 非结构化建模的挑战",
+    "content": "",
+    "color": "#3D76CC",
+    "level": 1,
+    "chapter": 15
+  },
+  "n510": {
+    "title": "16.2 使用图描述模型结构",
+    "content": "",
+    "color": "#3D76CC",
+    "level": 1,
+    "chapter": 15
+  },
+  "n511": {
+    "title": "16.2.1 有向模型",
+    "content": "",
+    "color": "#3D76CC",
+    "level": 1,
+    "chapter": 15
+  },
+  "n512": {
+    "title": "16.2.2 无向模型",
+    "content": "",
+    "color": "#3D76CC",
+    "level": 1,
+    "chapter": 15
+  },
+  "n513": {
+    "title": "16.2.3 配分函数",
+    "content": "",
+    "color": "#3D76CC",
+    "level": 1,
+    "chapter": 15
+  },
+  "n514": {
+    "title": "16.2.4 基于能量的模型",
+    "content": "",
+    "color": "#3D76CC",
+    "level": 1,
+    "chapter": 15
+  },
+  "n515": {
+    "title": "16.2.5 分离和d-分离",
+    "content": "",
+    "color": "#3D76CC",
+    "level": 1,
+    "chapter": 15
+  },
+  "n516": {
+    "title": "16.2.6 在有向模型和无向模型中转换",
+    "content": "",
+    "color": "#3D76CC",
+    "level": 1,
+    "chapter": 15
+  },
+  "n517": {
+    "title": "16.2.7 因子图",
+    "content": "",
+    "color": "#3D76CC",
+    "level": 1,
+    "chapter": 15
+  },
+  "n518": {
+    "title": "16.3 从图模型中采样",
+    "content": "",
+    "color": "#3D76CC",
+    "level": 1,
+    "chapter": 15
+  },
+  "n519": {
+    "title": "16.4 结构化建模的优势",
+    "content": "",
+    "color": "#3D76CC",
+    "level": 1,
+    "chapter": 15
+  },
+  "n520": {
+    "title": "16.5 学习依赖关系",
+    "content": "",
+    "color": "#3D76CC",
+    "level": 1,
+    "chapter": 15
+  },
+  "n521": {
+    "title": "16.6 推断和近似推断",
+    "content": "",
+    "color": "#3D76CC",
+    "level": 1,
+    "chapter": 15
+  },
+  "n522": {
+    "title": "16.7 结构化概率模型的深度学习方法",
+    "content": "",
+    "color": "#3D76CC",
+    "level": 1,
+    "chapter": 15
+  },
+  "n523": {
+    "title": "16.2     使用图描述模型结构",
+    "content": "",
+    "color": "#3D76CC",
+    "level": 1,
+    "chapter": 15
+  },
+  "n524": {
+    "title": "16.2.1   有向模型",
+    "content": "",
+    "color": "#3D76CC",
+    "level": 1,
+    "chapter": 15
+  },
+  "n525": {
+    "title": "16.2.2   无向模型",
+    "content": "",
+    "color": "#3D76CC",
+    "level": 1,
+    "chapter": 15
+  },
+  "n526": {
+    "title": "16.2.3   配分函数",
+    "content": "",
+    "color": "#3D76CC",
+    "level": 1,
+    "chapter": 15
+  },
+  "n527": {
+    "title": "16.2.4   基于能量的模型",
+    "content": "",
+    "color": "#3D76CC",
+    "level": 1,
+    "chapter": 15
+  },
+  "n528": {
+    "title": "16.7描述了一个从无向模型中读取分离信息的例子。",
+    "content": "",
+    "color": "#3D76CC",
+    "level": 1,
+    "chapter": 15
+  },
+  "n529": {
+    "title": "16.8。图16.9是从一个图中读取一些属性的例子。",
+    "content": "",
+    "color": "#3D76CC",
+    "level": 1,
+    "chapter": 15
+  },
+  "n530": {
+    "title": "16.2.6    在有向模型和无向模型中转换",
+    "content": "",
+    "color": "#3D76CC",
+    "level": 1,
+    "chapter": 15
+  },
+  "n531": {
+    "title": "16.3节中描述）的直接方法。而无向模型形式通常对于推导近似推断过",
+    "content": "",
+    "color": "#3D76CC",
+    "level": 1,
+    "chapter": 15
+  },
+  "n532": {
+    "title": "16.2.7   因子图",
+    "content": "",
+    "color": "#3D76CC",
+    "level": 1,
+    "chapter": 15
+  },
+  "n533": {
+    "title": "16.3   从图模型中采样",
+    "content": "",
+    "color": "#3D76CC",
+    "level": 1,
+    "chapter": 15
+  },
+  "n534": {
+    "title": "16.4   结构化建模的优势",
+    "content": "",
+    "color": "#3D76CC",
+    "level": 1,
+    "chapter": 15
+  },
+  "n535": {
+    "title": "16.5   学习依赖关系",
+    "content": "",
+    "color": "#3D76CC",
+    "level": 1,
+    "chapter": 15
+  },
+  "n536": {
+    "title": "16.6   推断和近似推断",
+    "content": "",
+    "color": "#3D76CC",
+    "level": 1,
+    "chapter": 15
+  },
+  "n537": {
+    "title": "16.7   结构化概率模型的深度学习方法",
+    "content": "",
+    "color": "#3D76CC",
+    "level": 1,
+    "chapter": 15
+  },
+  "n538": {
+    "title": "16.7.1   实例：受限玻尔兹曼机",
+    "content": "",
+    "color": "#3D76CC",
+    "level": 1,
+    "chapter": 15
+  },
+  "n539": {
+    "title": "16.7.1节简要介绍了RBM。在这里我们回顾以前的内容并探讨更多的细",
+    "content": "",
+    "color": "#3D76CC",
+    "level": 1,
+    "chapter": 15
+  },
+  "n540": {
+    "title": "第18章 直面配分函数",
+    "content": "",
+    "color": "#3D54CC",
+    "level": 0,
+    "chapter": 16
+  },
+  "n541": {
+    "title": "17.1 采样和蒙特卡罗方法",
+    "content": "",
+    "color": "#3D54CC",
+    "level": 1,
+    "chapter": 16
+  },
+  "n542": {
+    "title": "17.1.1 为什么需要采样",
+    "content": "",
+    "color": "#3D54CC",
+    "level": 1,
+    "chapter": 16
+  },
+  "n543": {
+    "title": "17.1.2 蒙特卡罗采样的基础",
+    "content": "",
+    "color": "#3D54CC",
+    "level": 1,
+    "chapter": 16
+  },
+  "n544": {
+    "title": "17.2 重要采样",
+    "content": "",
+    "color": "#3D54CC",
+    "level": 1,
+    "chapter": 16
+  },
+  "n545": {
+    "title": "17.3 马尔可夫链蒙特卡罗方法",
+    "content": "",
+    "color": "#3D54CC",
+    "level": 1,
+    "chapter": 16
+  },
+  "n546": {
+    "title": "17.4 Gibbs采样",
+    "content": "",
+    "color": "#3D54CC",
+    "level": 1,
+    "chapter": 16
+  },
+  "n547": {
+    "title": "17.5 不同的峰值之间的混合挑战",
+    "content": "",
+    "color": "#3D54CC",
+    "level": 1,
+    "chapter": 16
+  },
+  "n548": {
+    "title": "17.5.1 不同峰值之间通过回火来混合",
+    "content": "",
+    "color": "#3D54CC",
+    "level": 1,
+    "chapter": 16
+  },
+  "n549": {
+    "title": "17.5.2 深度也许会有助于混合",
+    "content": "",
+    "color": "#3D54CC",
+    "level": 1,
+    "chapter": 16
+  },
+  "n550": {
+    "title": "17.1     采样和蒙特卡罗方法",
+    "content": "",
+    "color": "#3D54CC",
+    "level": 1,
+    "chapter": 16
+  },
+  "n551": {
+    "title": "17.1.1   为什么需要采样",
+    "content": "",
+    "color": "#3D54CC",
+    "level": 1,
+    "chapter": 16
+  },
+  "n552": {
+    "title": "17.1.2   蒙特卡罗采样的基础",
+    "content": "",
+    "color": "#3D54CC",
+    "level": 1,
+    "chapter": 16
+  },
+  "n553": {
+    "title": "17.2   重要采样",
+    "content": "",
+    "color": "#3D54CC",
+    "level": 1,
+    "chapter": 16
+  },
+  "n554": {
+    "title": "17.3   马尔可夫链蒙特卡罗方法",
+    "content": "",
+    "color": "#3D54CC",
+    "level": 1,
+    "chapter": 16
+  },
+  "n555": {
+    "title": "17.4    Gibbs采样",
+    "content": "",
+    "color": "#3D54CC",
+    "level": 1,
+    "chapter": 16
+  },
+  "n556": {
+    "title": "17.5   不同的峰值之间的混合挑战",
+    "content": "",
+    "color": "#3D54CC",
+    "level": 1,
+    "chapter": 16
+  },
+  "n557": {
+    "title": "17.5.1   不同峰值之间通过回火来混合",
+    "content": "",
+    "color": "#3D54CC",
+    "level": 1,
+    "chapter": 16
+  },
+  "n558": {
+    "title": "17.5.2   深度也许会有助于混合",
+    "content": "",
+    "color": "#3D54CC",
+    "level": 1,
+    "chapter": 16
+  },
+  "n559": {
+    "title": "17.3节）。这些条件是保证链混合的必要条件，但它们可能被某些过渡",
+    "content": "",
+    "color": "#3D54CC",
+    "level": 1,
+    "chapter": 16
+  },
+  "n560": {
+    "title": "第19章 近似推断",
+    "content": "",
+    "color": "#483DCC",
+    "level": 0,
+    "chapter": 17
+  },
+  "n561": {
+    "title": "18.1 对数似然梯度",
+    "content": "",
+    "color": "#483DCC",
+    "level": 1,
+    "chapter": 17
+  },
+  "n562": {
+    "title": "18.2 随机最大似然和对比散度",
+    "content": "",
+    "color": "#483DCC",
+    "level": 1,
+    "chapter": 17
+  },
+  "n563": {
+    "title": "18.3 伪似然",
+    "content": "",
+    "color": "#483DCC",
+    "level": 1,
+    "chapter": 17
+  },
+  "n564": {
+    "title": "18.4 得分匹配和比率匹配",
+    "content": "",
+    "color": "#483DCC",
+    "level": 1,
+    "chapter": 17
+  },
+  "n565": {
+    "title": "18.5 去噪得分匹配",
+    "content": "",
+    "color": "#483DCC",
+    "level": 1,
+    "chapter": 17
+  },
+  "n566": {
+    "title": "18.6 噪声对比估计",
+    "content": "",
+    "color": "#483DCC",
+    "level": 1,
+    "chapter": 17
+  },
+  "n567": {
+    "title": "18.7 估计配分函数",
+    "content": "",
+    "color": "#483DCC",
+    "level": 1,
+    "chapter": 17
+  },
+  "n568": {
+    "title": "18.7.1 退火重要采样",
+    "content": "",
+    "color": "#483DCC",
+    "level": 1,
+    "chapter": 17
+  },
+  "n569": {
+    "title": "18.1   对数似然梯度",
+    "content": "",
+    "color": "#483DCC",
+    "level": 1,
+    "chapter": 17
+  },
+  "n570": {
+    "title": "18.2   随机最大似然和对比散度",
+    "content": "",
+    "color": "#483DCC",
+    "level": 1,
+    "chapter": 17
+  },
+  "n571": {
+    "title": "18.1展示了这个过程。这两种力分别对应最大化    和最小化log",
+    "content": "",
+    "color": "#483DCC",
+    "level": 1,
+    "chapter": 17
+  },
+  "n572": {
+    "title": "18.3    伪似然",
+    "content": "",
+    "color": "#483DCC",
+    "level": 1,
+    "chapter": 17
+  },
+  "n573": {
+    "title": "18.4   得分匹配和比率匹配",
+    "content": "",
+    "color": "#483DCC",
+    "level": 1,
+    "chapter": 17
+  },
+  "n574": {
+    "title": "18.5   去噪得分匹配",
+    "content": "",
+    "color": "#483DCC",
+    "level": 1,
+    "chapter": 17
+  },
+  "n575": {
+    "title": "18.6   噪声对比估计",
+    "content": "",
+    "color": "#483DCC",
+    "level": 1,
+    "chapter": 17
+  },
+  "n576": {
+    "title": "18.7   估计配分函数",
+    "content": "",
+    "color": "#483DCC",
+    "level": 1,
+    "chapter": 17
+  },
+  "n577": {
+    "title": "18.7.1   退火重要采样",
+    "content": "",
+    "color": "#483DCC",
+    "level": 1,
+    "chapter": 17
+  },
+  "n578": {
+    "title": "第20章 深度生成模型",
+    "content": "",
+    "color": "#6A3DCC",
+    "level": 0,
+    "chapter": 18
+  },
+  "n579": {
+    "title": "19.1 把推断视作优化问题",
+    "content": "",
+    "color": "#6A3DCC",
+    "level": 1,
+    "chapter": 18
+  },
+  "n580": {
+    "title": "19.2 期望最大化",
+    "content": "",
+    "color": "#6A3DCC",
+    "level": 1,
+    "chapter": 18
+  },
+  "n581": {
+    "title": "19.3 最大后验推断和稀疏编码",
+    "content": "",
+    "color": "#6A3DCC",
+    "level": 1,
+    "chapter": 18
+  },
+  "n582": {
+    "title": "19.4 变分推断和变分学习",
+    "content": "",
+    "color": "#6A3DCC",
+    "level": 1,
+    "chapter": 18
+  },
+  "n583": {
+    "title": "19.4.1 离散型潜变量",
+    "content": "",
+    "color": "#6A3DCC",
+    "level": 1,
+    "chapter": 18
+  },
+  "n584": {
+    "title": "19.4.2 变分法",
+    "content": "",
+    "color": "#6A3DCC",
+    "level": 1,
+    "chapter": 18
+  },
+  "n585": {
+    "title": "19.4.3 连续型潜变量",
+    "content": "",
+    "color": "#6A3DCC",
+    "level": 1,
+    "chapter": 18
+  },
+  "n586": {
+    "title": "19.4.4 学习和推断之间的相互作用",
+    "content": "",
+    "color": "#6A3DCC",
+    "level": 1,
+    "chapter": 18
+  },
+  "n587": {
+    "title": "19.5 学成近似推断",
+    "content": "",
+    "color": "#6A3DCC",
+    "level": 1,
+    "chapter": 18
+  },
+  "n588": {
+    "title": "19.5.1 醒眠算法",
+    "content": "",
+    "color": "#6A3DCC",
+    "level": 1,
+    "chapter": 18
+  },
+  "n589": {
+    "title": "19.5.2 学成推断的其他形式",
+    "content": "",
+    "color": "#6A3DCC",
+    "level": 1,
+    "chapter": 18
+  },
+  "n590": {
+    "title": "19.1    把推断视作优化问题",
+    "content": "",
+    "color": "#6A3DCC",
+    "level": 1,
+    "chapter": 18
+  },
+  "n591": {
+    "title": "19.2   期望最大化",
+    "content": "",
+    "color": "#6A3DCC",
+    "level": 1,
+    "chapter": 18
+  },
+  "n592": {
+    "title": "19.3   最大后验推断和稀疏编码",
+    "content": "",
+    "color": "#6A3DCC",
+    "level": 1,
+    "chapter": 18
+  },
+  "n593": {
+    "title": "19.4   变分推断和变分学习",
+    "content": "",
+    "color": "#6A3DCC",
+    "level": 1,
+    "chapter": 18
+  },
+  "n594": {
+    "title": "19.4.1   离散型潜变量",
+    "content": "",
+    "color": "#6A3DCC",
+    "level": 1,
+    "chapter": 18
+  },
+  "n595": {
+    "title": "19.4.2   变分法",
+    "content": "",
+    "color": "#6A3DCC",
+    "level": 1,
+    "chapter": 18
+  },
+  "n596": {
+    "title": "19.4.3   连续型潜变量",
+    "content": "",
+    "color": "#6A3DCC",
+    "level": 1,
+    "chapter": 18
+  },
+  "n597": {
+    "title": "19.4.4   学习和推断之间的相互作用",
+    "content": "",
+    "color": "#6A3DCC",
+    "level": 1,
+    "chapter": 18
+  },
+  "n598": {
+    "title": "19.5.1   醒眠算法",
+    "content": "",
+    "color": "#6A3DCC",
+    "level": 1,
+    "chapter": 18
+  },
+  "n599": {
+    "title": "19.5.2   学成推断的其他形式",
+    "content": "",
+    "color": "#6A3DCC",
+    "level": 1,
+    "chapter": 18
+  },
+  "n600": {
+    "title": "第16章中，我们更加详细地探讨从简单概率分布构建复杂模型的技术。",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 0,
+    "chapter": 19
+  },
+  "n601": {
+    "title": "20.1 玻尔兹曼机",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n602": {
+    "title": "20.2 受限玻尔兹曼机",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n603": {
+    "title": "20.2.1 条件分布",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n604": {
+    "title": "20.2.2 训练受限玻尔兹曼机",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n605": {
+    "title": "20.3 深度信念网络",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n606": {
+    "title": "20.4 深度玻尔兹曼机",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n607": {
+    "title": "20.4.2 DBM均匀场推断",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n608": {
+    "title": "20.4.3 DBM的参数学习",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n609": {
+    "title": "20.4.4 逐层预训练",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n610": {
+    "title": "20.4.5 联合训练深度玻尔兹曼机",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n611": {
+    "title": "20.5 实值数据上的玻尔兹曼机",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n612": {
+    "title": "20.5.1 Gaussian-Bernoulli RBM",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n613": {
+    "title": "20.5.2 条件协方差的无向模型",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n614": {
+    "title": "20.6 卷积玻尔兹曼机",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n615": {
+    "title": "20.7 用于结构化或序列输出的玻尔兹曼机",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n616": {
+    "title": "20.8 其他玻尔兹曼机",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n617": {
+    "title": "20.9 通过随机操作的反向传播",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n618": {
+    "title": "20.9.1 通过离散随机操作的反向传播",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n619": {
+    "title": "20.10   有向生成网络",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n620": {
+    "title": "20.10.1 sigmoid信念网络",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n621": {
+    "title": "20.10.2 可微生成器网络",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n622": {
+    "title": "20.10.3 变分自编码器",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n623": {
+    "title": "20.10.4 生成式对抗网络",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n624": {
+    "title": "20.10.5 生成矩匹配网络",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n625": {
+    "title": "20.10.6 卷积生成网络",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n626": {
+    "title": "20.10.8 线性自回归网络",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n627": {
+    "title": "20.10.9 神经自回归网络",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n628": {
+    "title": "20.10.10   NADE",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n629": {
+    "title": "20.11   从自编码器采样",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n630": {
+    "title": "20.11.1 与任意去噪自编码器相关的马尔可夫链",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n631": {
+    "title": "20.11.2 夹合与条件采样",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n632": {
+    "title": "20.11.3 回退训练过程",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n633": {
+    "title": "20.12   生成随机网络",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n634": {
+    "title": "20.12.1 判别性GSN",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n635": {
+    "title": "20.13   其他生成方案",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n636": {
+    "title": "20.14   评估生成模型",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n637": {
+    "title": "20.15   结论",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n638": {
+    "title": "20.6节中讨论这个想法的实际应用。",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n639": {
+    "title": "20.10.3节）。采用随机梯度下降训练模型参数时重要采样可以用来改进",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n640": {
+    "title": "20.13节中讨论第二种方法的例子。",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n641": {
+    "title": "20.1    玻尔兹曼机",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n642": {
+    "title": "20.2   受限玻尔兹曼机",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n643": {
+    "title": "20.2.1   条件分布",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n644": {
+    "title": "20.3     深度信念网络",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n645": {
+    "title": "20.4    深度玻尔兹曼机",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n646": {
+    "title": "20.4.1   有趣的性质",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n647": {
+    "title": "20.4.2   DBM均匀场推断",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n648": {
+    "title": "20.4.3   DBM的参数学习",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n649": {
+    "title": "20.4.4   逐层预训练",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n650": {
+    "title": "20.4.5   联合训练深度玻尔兹曼机",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n651": {
+    "title": "20.5   实值数据上的玻尔兹曼机",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n652": {
+    "title": "20.5.1   Gaussian-Bernoulli RBM",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n653": {
+    "title": "20.5.2   条件协方差的无向模型",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n654": {
+    "title": "20.6   卷积玻尔兹曼机",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n655": {
+    "title": "20.7   用于结构化或序列输出的玻尔兹曼",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n656": {
+    "title": "20.9.1   通过离散随机操作的反向传播",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n657": {
+    "title": "20.10    有向生成网络",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n658": {
+    "title": "20.10.1   sigmoid信念网络",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n659": {
+    "title": "20.10.2   可微生成器网络",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n660": {
+    "title": "20.10.3   变分自编码器",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n661": {
+    "title": "20.10.4   生成式对抗网络",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n662": {
+    "title": "20.10.5   生成矩匹配网络",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n663": {
+    "title": "20.10.6   卷积生成网络",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n664": {
+    "title": "20.10.7   自回归网络",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n665": {
+    "title": "20.10.8   线性自回归网络",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n666": {
+    "title": "20.10.9   神经自回归网络",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n667": {
+    "title": "20.10.10   NADE",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n668": {
+    "title": "20.11   从自编码器采样",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n669": {
+    "title": "20.11.1     与任意去噪自编码器相关的马尔可夫链",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n670": {
+    "title": "20.11所示。",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n671": {
+    "title": "20.11.2   夹合与条件采样",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n672": {
+    "title": "20.11.3   回退训练过程",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n673": {
+    "title": "20.12     生成随机网络",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n674": {
+    "title": "20.9节中介绍的重参数化技巧。",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n675": {
+    "title": "20.12.1   判别性GSN",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n676": {
+    "title": "20.13   其他生成方案",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n677": {
+    "title": "20.14    评估生成模型",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n678": {
+    "title": "20.15   结论",
+    "content": "",
+    "color": "#8D3DCC",
+    "level": 1,
+    "chapter": 19
+  },
+  "n679": {
+    "title": "第7章讨论的包括参数正则项的函数。",
+    "content": "",
+    "color": "#AF3DCC",
+    "level": 0,
+    "chapter": 20
+  },
+  "n680": {
+    "title": "第9章所述的卷积网络，在特征映射中每个空间位置同样地标准化μ和σ",
+    "content": "",
+    "color": "#CC3DC6",
+    "level": 0,
+    "chapter": 21
+  },
+  "n681": {
+    "title": "第14章描述的自编码器网络，是一些被训练成把输入拷贝到输出的前馈",
+    "content": "",
+    "color": "#CC3DA4",
+    "level": 0,
+    "chapter": 22
+  },
+  "n682": {
+    "title": "第19章中出现的技术构建和训练。所有这些模型在某种程度上都代表了",
+    "content": "",
+    "color": "#CC3D81",
+    "level": 0,
+    "chapter": 23
+  },
+  "n683": {
+    "title": "第1章   引言",
+    "content": "",
+    "color": "#CC3D5F",
+    "level": 0,
+    "chapter": 24
+  }
+};
+        
+        // 直接定義關係數據
+        const relationships = [
+  {
+    "source": "n0",
+    "target": "n1",
+    "type": "包含"
+  },
+  {
+    "source": "n0",
+    "target": "n2",
+    "type": "包含"
+  },
+  {
+    "source": "n0",
+    "target": "n3",
+    "type": "包含"
+  },
+  {
+    "source": "n0",
+    "target": "n4",
+    "type": "包含"
+  },
+  {
+    "source": "n0",
+    "target": "n5",
+    "type": "包含"
+  },
+  {
+    "source": "n0",
+    "target": "n6",
+    "type": "包含"
+  },
+  {
+    "source": "n0",
+    "target": "n7",
+    "type": "包含"
+  },
+  {
+    "source": "n0",
+    "target": "n8",
+    "type": "包含"
+  },
+  {
+    "source": "n0",
+    "target": "n9",
+    "type": "包含"
+  },
+  {
+    "source": "n0",
+    "target": "n10",
+    "type": "包含"
+  },
+  {
+    "source": "n0",
+    "target": "n11",
+    "type": "包含"
+  },
+  {
+    "source": "n0",
+    "target": "n12",
+    "type": "包含"
+  },
+  {
+    "source": "n13",
+    "target": "n14",
+    "type": "包含"
+  },
+  {
+    "source": "n13",
+    "target": "n15",
+    "type": "包含"
+  },
+  {
+    "source": "n13",
+    "target": "n16",
+    "type": "包含"
+  },
+  {
+    "source": "n13",
+    "target": "n17",
+    "type": "包含"
+  },
+  {
+    "source": "n13",
+    "target": "n18",
+    "type": "包含"
+  },
+  {
+    "source": "n13",
+    "target": "n19",
+    "type": "包含"
+  },
+  {
+    "source": "n13",
+    "target": "n20",
+    "type": "包含"
+  },
+  {
+    "source": "n13",
+    "target": "n21",
+    "type": "包含"
+  },
+  {
+    "source": "n13",
+    "target": "n22",
+    "type": "包含"
+  },
+  {
+    "source": "n13",
+    "target": "n23",
+    "type": "包含"
+  },
+  {
+    "source": "n13",
+    "target": "n24",
+    "type": "包含"
+  },
+  {
+    "source": "n13",
+    "target": "n25",
+    "type": "包含"
+  },
+  {
+    "source": "n13",
+    "target": "n26",
+    "type": "包含"
+  },
+  {
+    "source": "n13",
+    "target": "n27",
+    "type": "包含"
+  },
+  {
+    "source": "n13",
+    "target": "n28",
+    "type": "包含"
+  },
+  {
+    "source": "n13",
+    "target": "n29",
+    "type": "包含"
+  },
+  {
+    "source": "n13",
+    "target": "n30",
+    "type": "包含"
+  },
+  {
+    "source": "n13",
+    "target": "n31",
+    "type": "包含"
+  },
+  {
+    "source": "n13",
+    "target": "n32",
+    "type": "包含"
+  },
+  {
+    "source": "n13",
+    "target": "n33",
+    "type": "包含"
+  },
+  {
+    "source": "n13",
+    "target": "n34",
+    "type": "包含"
+  },
+  {
+    "source": "n13",
+    "target": "n35",
+    "type": "包含"
+  },
+  {
+    "source": "n13",
+    "target": "n36",
+    "type": "包含"
+  },
+  {
+    "source": "n37",
+    "target": "n38",
+    "type": "包含"
+  },
+  {
+    "source": "n37",
+    "target": "n39",
+    "type": "包含"
+  },
+  {
+    "source": "n37",
+    "target": "n40",
+    "type": "包含"
+  },
+  {
+    "source": "n37",
+    "target": "n41",
+    "type": "包含"
+  },
+  {
+    "source": "n37",
+    "target": "n42",
+    "type": "包含"
+  },
+  {
+    "source": "n37",
+    "target": "n43",
+    "type": "包含"
+  },
+  {
+    "source": "n37",
+    "target": "n44",
+    "type": "包含"
+  },
+  {
+    "source": "n37",
+    "target": "n45",
+    "type": "包含"
+  },
+  {
+    "source": "n37",
+    "target": "n46",
+    "type": "包含"
+  },
+  {
+    "source": "n37",
+    "target": "n47",
+    "type": "包含"
+  },
+  {
+    "source": "n37",
+    "target": "n48",
+    "type": "包含"
+  },
+  {
+    "source": "n37",
+    "target": "n49",
+    "type": "包含"
+  },
+  {
+    "source": "n37",
+    "target": "n50",
+    "type": "包含"
+  },
+  {
+    "source": "n37",
+    "target": "n51",
+    "type": "包含"
+  },
+  {
+    "source": "n37",
+    "target": "n52",
+    "type": "包含"
+  },
+  {
+    "source": "n37",
+    "target": "n53",
+    "type": "包含"
+  },
+  {
+    "source": "n37",
+    "target": "n54",
+    "type": "包含"
+  },
+  {
+    "source": "n37",
+    "target": "n55",
+    "type": "包含"
+  },
+  {
+    "source": "n37",
+    "target": "n56",
+    "type": "包含"
+  },
+  {
+    "source": "n37",
+    "target": "n57",
+    "type": "包含"
+  },
+  {
+    "source": "n37",
+    "target": "n58",
+    "type": "包含"
+  },
+  {
+    "source": "n37",
+    "target": "n59",
+    "type": "包含"
+  },
+  {
+    "source": "n37",
+    "target": "n60",
+    "type": "包含"
+  },
+  {
+    "source": "n37",
+    "target": "n61",
+    "type": "包含"
+  },
+  {
+    "source": "n37",
+    "target": "n62",
+    "type": "包含"
+  },
+  {
+    "source": "n37",
+    "target": "n63",
+    "type": "包含"
+  },
+  {
+    "source": "n37",
+    "target": "n64",
+    "type": "包含"
+  },
+  {
+    "source": "n37",
+    "target": "n65",
+    "type": "包含"
+  },
+  {
+    "source": "n37",
+    "target": "n66",
+    "type": "包含"
+  },
+  {
+    "source": "n37",
+    "target": "n67",
+    "type": "包含"
+  },
+  {
+    "source": "n37",
+    "target": "n68",
+    "type": "包含"
+  },
+  {
+    "source": "n37",
+    "target": "n69",
+    "type": "包含"
+  },
+  {
+    "source": "n37",
+    "target": "n70",
+    "type": "包含"
+  },
+  {
+    "source": "n37",
+    "target": "n71",
+    "type": "包含"
+  },
+  {
+    "source": "n37",
+    "target": "n72",
+    "type": "包含"
+  },
+  {
+    "source": "n37",
+    "target": "n73",
+    "type": "包含"
+  },
+  {
+    "source": "n37",
+    "target": "n74",
+    "type": "包含"
+  },
+  {
+    "source": "n37",
+    "target": "n75",
+    "type": "包含"
+  },
+  {
+    "source": "n37",
+    "target": "n76",
+    "type": "包含"
+  },
+  {
+    "source": "n37",
+    "target": "n77",
+    "type": "包含"
+  },
+  {
+    "source": "n37",
+    "target": "n78",
+    "type": "包含"
+  },
+  {
+    "source": "n37",
+    "target": "n79",
+    "type": "包含"
+  },
+  {
+    "source": "n80",
+    "target": "n81",
+    "type": "包含"
+  },
+  {
+    "source": "n80",
+    "target": "n82",
+    "type": "包含"
+  },
+  {
+    "source": "n80",
+    "target": "n83",
+    "type": "包含"
+  },
+  {
+    "source": "n80",
+    "target": "n84",
+    "type": "包含"
+  },
+  {
+    "source": "n80",
+    "target": "n85",
+    "type": "包含"
+  },
+  {
+    "source": "n80",
+    "target": "n86",
+    "type": "包含"
+  },
+  {
+    "source": "n80",
+    "target": "n87",
+    "type": "包含"
+  },
+  {
+    "source": "n80",
+    "target": "n88",
+    "type": "包含"
+  },
+  {
+    "source": "n80",
+    "target": "n89",
+    "type": "包含"
+  },
+  {
+    "source": "n80",
+    "target": "n90",
+    "type": "包含"
+  },
+  {
+    "source": "n80",
+    "target": "n91",
+    "type": "包含"
+  },
+  {
+    "source": "n80",
+    "target": "n92",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n94",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n95",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n96",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n97",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n98",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n99",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n100",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n101",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n102",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n103",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n104",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n105",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n106",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n107",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n108",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n109",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n110",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n111",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n112",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n113",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n114",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n115",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n116",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n117",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n118",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n119",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n120",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n121",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n122",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n123",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n124",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n125",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n126",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n127",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n128",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n129",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n130",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n131",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n132",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n133",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n134",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n135",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n136",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n137",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n138",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n139",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n140",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n141",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n142",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n143",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n144",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n145",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n146",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n147",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n148",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n149",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n150",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n151",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n152",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n153",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n154",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n155",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n156",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n157",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n158",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n159",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n160",
+    "type": "包含"
+  },
+  {
+    "source": "n93",
+    "target": "n161",
+    "type": "包含"
+  },
+  {
+    "source": "n162",
+    "target": "n163",
+    "type": "包含"
+  },
+  {
+    "source": "n162",
+    "target": "n164",
+    "type": "包含"
+  },
+  {
+    "source": "n162",
+    "target": "n165",
+    "type": "包含"
+  },
+  {
+    "source": "n162",
+    "target": "n166",
+    "type": "包含"
+  },
+  {
+    "source": "n162",
+    "target": "n167",
+    "type": "包含"
+  },
+  {
+    "source": "n162",
+    "target": "n168",
+    "type": "包含"
+  },
+  {
+    "source": "n162",
+    "target": "n169",
+    "type": "包含"
+  },
+  {
+    "source": "n162",
+    "target": "n170",
+    "type": "包含"
+  },
+  {
+    "source": "n162",
+    "target": "n171",
+    "type": "包含"
+  },
+  {
+    "source": "n162",
+    "target": "n172",
+    "type": "包含"
+  },
+  {
+    "source": "n162",
+    "target": "n173",
+    "type": "包含"
+  },
+  {
+    "source": "n162",
+    "target": "n174",
+    "type": "包含"
+  },
+  {
+    "source": "n162",
+    "target": "n175",
+    "type": "包含"
+  },
+  {
+    "source": "n162",
+    "target": "n176",
+    "type": "包含"
+  },
+  {
+    "source": "n162",
+    "target": "n177",
+    "type": "包含"
+  },
+  {
+    "source": "n162",
+    "target": "n178",
+    "type": "包含"
+  },
+  {
+    "source": "n162",
+    "target": "n179",
+    "type": "包含"
+  },
+  {
+    "source": "n162",
+    "target": "n180",
+    "type": "包含"
+  },
+  {
+    "source": "n162",
+    "target": "n181",
+    "type": "包含"
+  },
+  {
+    "source": "n162",
+    "target": "n182",
+    "type": "包含"
+  },
+  {
+    "source": "n162",
+    "target": "n183",
+    "type": "包含"
+  },
+  {
+    "source": "n162",
+    "target": "n184",
+    "type": "包含"
+  },
+  {
+    "source": "n162",
+    "target": "n185",
+    "type": "包含"
+  },
+  {
+    "source": "n162",
+    "target": "n186",
+    "type": "包含"
+  },
+  {
+    "source": "n162",
+    "target": "n187",
+    "type": "包含"
+  },
+  {
+    "source": "n162",
+    "target": "n188",
+    "type": "包含"
+  },
+  {
+    "source": "n162",
+    "target": "n189",
+    "type": "包含"
+  },
+  {
+    "source": "n162",
+    "target": "n190",
+    "type": "包含"
+  },
+  {
+    "source": "n162",
+    "target": "n191",
+    "type": "包含"
+  },
+  {
+    "source": "n162",
+    "target": "n192",
+    "type": "包含"
+  },
+  {
+    "source": "n162",
+    "target": "n193",
+    "type": "包含"
+  },
+  {
+    "source": "n162",
+    "target": "n194",
+    "type": "包含"
+  },
+  {
+    "source": "n162",
+    "target": "n195",
+    "type": "包含"
+  },
+  {
+    "source": "n162",
+    "target": "n196",
+    "type": "包含"
+  },
+  {
+    "source": "n162",
+    "target": "n197",
+    "type": "包含"
+  },
+  {
+    "source": "n162",
+    "target": "n198",
+    "type": "包含"
+  },
+  {
+    "source": "n162",
+    "target": "n199",
+    "type": "包含"
+  },
+  {
+    "source": "n162",
+    "target": "n200",
+    "type": "包含"
+  },
+  {
+    "source": "n162",
+    "target": "n201",
+    "type": "包含"
+  },
+  {
+    "source": "n162",
+    "target": "n202",
+    "type": "包含"
+  },
+  {
+    "source": "n162",
+    "target": "n203",
+    "type": "包含"
+  },
+  {
+    "source": "n162",
+    "target": "n204",
+    "type": "包含"
+  },
+  {
+    "source": "n162",
+    "target": "n205",
+    "type": "包含"
+  },
+  {
+    "source": "n162",
+    "target": "n206",
+    "type": "包含"
+  },
+  {
+    "source": "n162",
+    "target": "n207",
+    "type": "包含"
+  },
+  {
+    "source": "n162",
+    "target": "n208",
+    "type": "包含"
+  },
+  {
+    "source": "n162",
+    "target": "n209",
+    "type": "包含"
+  },
+  {
+    "source": "n162",
+    "target": "n210",
+    "type": "包含"
+  },
+  {
+    "source": "n162",
+    "target": "n211",
+    "type": "包含"
+  },
+  {
+    "source": "n212",
+    "target": "n213",
+    "type": "包含"
+  },
+  {
+    "source": "n212",
+    "target": "n214",
+    "type": "包含"
+  },
+  {
+    "source": "n212",
+    "target": "n215",
+    "type": "包含"
+  },
+  {
+    "source": "n212",
+    "target": "n216",
+    "type": "包含"
+  },
+  {
+    "source": "n212",
+    "target": "n217",
+    "type": "包含"
+  },
+  {
+    "source": "n212",
+    "target": "n218",
+    "type": "包含"
+  },
+  {
+    "source": "n212",
+    "target": "n219",
+    "type": "包含"
+  },
+  {
+    "source": "n212",
+    "target": "n220",
+    "type": "包含"
+  },
+  {
+    "source": "n212",
+    "target": "n221",
+    "type": "包含"
+  },
+  {
+    "source": "n212",
+    "target": "n222",
+    "type": "包含"
+  },
+  {
+    "source": "n212",
+    "target": "n223",
+    "type": "包含"
+  },
+  {
+    "source": "n212",
+    "target": "n224",
+    "type": "包含"
+  },
+  {
+    "source": "n212",
+    "target": "n225",
+    "type": "包含"
+  },
+  {
+    "source": "n212",
+    "target": "n226",
+    "type": "包含"
+  },
+  {
+    "source": "n212",
+    "target": "n227",
+    "type": "包含"
+  },
+  {
+    "source": "n212",
+    "target": "n228",
+    "type": "包含"
+  },
+  {
+    "source": "n212",
+    "target": "n229",
+    "type": "包含"
+  },
+  {
+    "source": "n212",
+    "target": "n230",
+    "type": "包含"
+  },
+  {
+    "source": "n212",
+    "target": "n231",
+    "type": "包含"
+  },
+  {
+    "source": "n212",
+    "target": "n232",
+    "type": "包含"
+  },
+  {
+    "source": "n212",
+    "target": "n233",
+    "type": "包含"
+  },
+  {
+    "source": "n212",
+    "target": "n234",
+    "type": "包含"
+  },
+  {
+    "source": "n212",
+    "target": "n235",
+    "type": "包含"
+  },
+  {
+    "source": "n212",
+    "target": "n236",
+    "type": "包含"
+  },
+  {
+    "source": "n212",
+    "target": "n237",
+    "type": "包含"
+  },
+  {
+    "source": "n212",
+    "target": "n238",
+    "type": "包含"
+  },
+  {
+    "source": "n212",
+    "target": "n239",
+    "type": "包含"
+  },
+  {
+    "source": "n212",
+    "target": "n240",
+    "type": "包含"
+  },
+  {
+    "source": "n212",
+    "target": "n241",
+    "type": "包含"
+  },
+  {
+    "source": "n212",
+    "target": "n242",
+    "type": "包含"
+  },
+  {
+    "source": "n212",
+    "target": "n243",
+    "type": "包含"
+  },
+  {
+    "source": "n212",
+    "target": "n244",
+    "type": "包含"
+  },
+  {
+    "source": "n212",
+    "target": "n245",
+    "type": "包含"
+  },
+  {
+    "source": "n212",
+    "target": "n246",
+    "type": "包含"
+  },
+  {
+    "source": "n212",
+    "target": "n247",
+    "type": "包含"
+  },
+  {
+    "source": "n212",
+    "target": "n248",
+    "type": "包含"
+  },
+  {
+    "source": "n212",
+    "target": "n249",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n251",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n252",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n253",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n254",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n255",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n256",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n257",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n258",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n259",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n260",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n261",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n262",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n263",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n264",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n265",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n266",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n267",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n268",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n269",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n270",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n271",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n272",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n273",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n274",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n275",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n276",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n277",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n278",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n279",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n280",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n281",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n282",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n283",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n284",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n285",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n286",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n287",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n288",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n289",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n290",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n291",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n292",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n293",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n294",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n295",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n296",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n297",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n298",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n299",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n300",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n301",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n302",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n303",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n304",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n305",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n306",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n307",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n308",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n309",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n310",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n311",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n312",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n313",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n314",
+    "type": "包含"
+  },
+  {
+    "source": "n250",
+    "target": "n315",
+    "type": "包含"
+  },
+  {
+    "source": "n316",
+    "target": "n317",
+    "type": "包含"
+  },
+  {
+    "source": "n316",
+    "target": "n318",
+    "type": "包含"
+  },
+  {
+    "source": "n316",
+    "target": "n319",
+    "type": "包含"
+  },
+  {
+    "source": "n316",
+    "target": "n320",
+    "type": "包含"
+  },
+  {
+    "source": "n316",
+    "target": "n321",
+    "type": "包含"
+  },
+  {
+    "source": "n316",
+    "target": "n322",
+    "type": "包含"
+  },
+  {
+    "source": "n316",
+    "target": "n323",
+    "type": "包含"
+  },
+  {
+    "source": "n316",
+    "target": "n324",
+    "type": "包含"
+  },
+  {
+    "source": "n316",
+    "target": "n325",
+    "type": "包含"
+  },
+  {
+    "source": "n316",
+    "target": "n326",
+    "type": "包含"
+  },
+  {
+    "source": "n316",
+    "target": "n327",
+    "type": "包含"
+  },
+  {
+    "source": "n316",
+    "target": "n328",
+    "type": "包含"
+  },
+  {
+    "source": "n316",
+    "target": "n329",
+    "type": "包含"
+  },
+  {
+    "source": "n316",
+    "target": "n330",
+    "type": "包含"
+  },
+  {
+    "source": "n316",
+    "target": "n331",
+    "type": "包含"
+  },
+  {
+    "source": "n316",
+    "target": "n332",
+    "type": "包含"
+  },
+  {
+    "source": "n316",
+    "target": "n333",
+    "type": "包含"
+  },
+  {
+    "source": "n316",
+    "target": "n334",
+    "type": "包含"
+  },
+  {
+    "source": "n316",
+    "target": "n335",
+    "type": "包含"
+  },
+  {
+    "source": "n316",
+    "target": "n336",
+    "type": "包含"
+  },
+  {
+    "source": "n316",
+    "target": "n337",
+    "type": "包含"
+  },
+  {
+    "source": "n316",
+    "target": "n338",
+    "type": "包含"
+  },
+  {
+    "source": "n339",
+    "target": "n340",
+    "type": "包含"
+  },
+  {
+    "source": "n339",
+    "target": "n341",
+    "type": "包含"
+  },
+  {
+    "source": "n339",
+    "target": "n342",
+    "type": "包含"
+  },
+  {
+    "source": "n339",
+    "target": "n343",
+    "type": "包含"
+  },
+  {
+    "source": "n339",
+    "target": "n344",
+    "type": "包含"
+  },
+  {
+    "source": "n339",
+    "target": "n345",
+    "type": "包含"
+  },
+  {
+    "source": "n339",
+    "target": "n346",
+    "type": "包含"
+  },
+  {
+    "source": "n339",
+    "target": "n347",
+    "type": "包含"
+  },
+  {
+    "source": "n339",
+    "target": "n348",
+    "type": "包含"
+  },
+  {
+    "source": "n339",
+    "target": "n349",
+    "type": "包含"
+  },
+  {
+    "source": "n339",
+    "target": "n350",
+    "type": "包含"
+  },
+  {
+    "source": "n339",
+    "target": "n351",
+    "type": "包含"
+  },
+  {
+    "source": "n339",
+    "target": "n352",
+    "type": "包含"
+  },
+  {
+    "source": "n339",
+    "target": "n353",
+    "type": "包含"
+  },
+  {
+    "source": "n339",
+    "target": "n354",
+    "type": "包含"
+  },
+  {
+    "source": "n339",
+    "target": "n355",
+    "type": "包含"
+  },
+  {
+    "source": "n339",
+    "target": "n356",
+    "type": "包含"
+  },
+  {
+    "source": "n339",
+    "target": "n357",
+    "type": "包含"
+  },
+  {
+    "source": "n339",
+    "target": "n358",
+    "type": "包含"
+  },
+  {
+    "source": "n339",
+    "target": "n359",
+    "type": "包含"
+  },
+  {
+    "source": "n339",
+    "target": "n360",
+    "type": "包含"
+  },
+  {
+    "source": "n339",
+    "target": "n361",
+    "type": "包含"
+  },
+  {
+    "source": "n339",
+    "target": "n362",
+    "type": "包含"
+  },
+  {
+    "source": "n339",
+    "target": "n363",
+    "type": "包含"
+  },
+  {
+    "source": "n339",
+    "target": "n364",
+    "type": "包含"
+  },
+  {
+    "source": "n339",
+    "target": "n365",
+    "type": "包含"
+  },
+  {
+    "source": "n339",
+    "target": "n366",
+    "type": "包含"
+  },
+  {
+    "source": "n339",
+    "target": "n367",
+    "type": "包含"
+  },
+  {
+    "source": "n339",
+    "target": "n368",
+    "type": "包含"
+  },
+  {
+    "source": "n339",
+    "target": "n369",
+    "type": "包含"
+  },
+  {
+    "source": "n339",
+    "target": "n370",
+    "type": "包含"
+  },
+  {
+    "source": "n339",
+    "target": "n371",
+    "type": "包含"
+  },
+  {
+    "source": "n339",
+    "target": "n372",
+    "type": "包含"
+  },
+  {
+    "source": "n339",
+    "target": "n373",
+    "type": "包含"
+  },
+  {
+    "source": "n339",
+    "target": "n374",
+    "type": "包含"
+  },
+  {
+    "source": "n339",
+    "target": "n375",
+    "type": "包含"
+  },
+  {
+    "source": "n339",
+    "target": "n376",
+    "type": "包含"
+  },
+  {
+    "source": "n339",
+    "target": "n377",
+    "type": "包含"
+  },
+  {
+    "source": "n339",
+    "target": "n378",
+    "type": "包含"
+  },
+  {
+    "source": "n339",
+    "target": "n379",
+    "type": "包含"
+  },
+  {
+    "source": "n339",
+    "target": "n380",
+    "type": "包含"
+  },
+  {
+    "source": "n339",
+    "target": "n381",
+    "type": "包含"
+  },
+  {
+    "source": "n339",
+    "target": "n382",
+    "type": "包含"
+  },
+  {
+    "source": "n339",
+    "target": "n383",
+    "type": "包含"
+  },
+  {
+    "source": "n339",
+    "target": "n384",
+    "type": "包含"
+  },
+  {
+    "source": "n385",
+    "target": "n386",
+    "type": "包含"
+  },
+  {
+    "source": "n385",
+    "target": "n387",
+    "type": "包含"
+  },
+  {
+    "source": "n385",
+    "target": "n388",
+    "type": "包含"
+  },
+  {
+    "source": "n385",
+    "target": "n389",
+    "type": "包含"
+  },
+  {
+    "source": "n385",
+    "target": "n390",
+    "type": "包含"
+  },
+  {
+    "source": "n385",
+    "target": "n391",
+    "type": "包含"
+  },
+  {
+    "source": "n385",
+    "target": "n392",
+    "type": "包含"
+  },
+  {
+    "source": "n385",
+    "target": "n393",
+    "type": "包含"
+  },
+  {
+    "source": "n385",
+    "target": "n394",
+    "type": "包含"
+  },
+  {
+    "source": "n385",
+    "target": "n395",
+    "type": "包含"
+  },
+  {
+    "source": "n385",
+    "target": "n396",
+    "type": "包含"
+  },
+  {
+    "source": "n385",
+    "target": "n397",
+    "type": "包含"
+  },
+  {
+    "source": "n385",
+    "target": "n398",
+    "type": "包含"
+  },
+  {
+    "source": "n385",
+    "target": "n399",
+    "type": "包含"
+  },
+  {
+    "source": "n385",
+    "target": "n400",
+    "type": "包含"
+  },
+  {
+    "source": "n385",
+    "target": "n401",
+    "type": "包含"
+  },
+  {
+    "source": "n385",
+    "target": "n402",
+    "type": "包含"
+  },
+  {
+    "source": "n385",
+    "target": "n403",
+    "type": "包含"
+  },
+  {
+    "source": "n385",
+    "target": "n404",
+    "type": "包含"
+  },
+  {
+    "source": "n385",
+    "target": "n405",
+    "type": "包含"
+  },
+  {
+    "source": "n385",
+    "target": "n406",
+    "type": "包含"
+  },
+  {
+    "source": "n407",
+    "target": "n408",
+    "type": "包含"
+  },
+  {
+    "source": "n407",
+    "target": "n409",
+    "type": "包含"
+  },
+  {
+    "source": "n407",
+    "target": "n410",
+    "type": "包含"
+  },
+  {
+    "source": "n407",
+    "target": "n411",
+    "type": "包含"
+  },
+  {
+    "source": "n407",
+    "target": "n412",
+    "type": "包含"
+  },
+  {
+    "source": "n407",
+    "target": "n413",
+    "type": "包含"
+  },
+  {
+    "source": "n407",
+    "target": "n414",
+    "type": "包含"
+  },
+  {
+    "source": "n407",
+    "target": "n415",
+    "type": "包含"
+  },
+  {
+    "source": "n407",
+    "target": "n416",
+    "type": "包含"
+  },
+  {
+    "source": "n407",
+    "target": "n417",
+    "type": "包含"
+  },
+  {
+    "source": "n407",
+    "target": "n418",
+    "type": "包含"
+  },
+  {
+    "source": "n407",
+    "target": "n419",
+    "type": "包含"
+  },
+  {
+    "source": "n407",
+    "target": "n420",
+    "type": "包含"
+  },
+  {
+    "source": "n407",
+    "target": "n421",
+    "type": "包含"
+  },
+  {
+    "source": "n407",
+    "target": "n422",
+    "type": "包含"
+  },
+  {
+    "source": "n407",
+    "target": "n423",
+    "type": "包含"
+  },
+  {
+    "source": "n407",
+    "target": "n424",
+    "type": "包含"
+  },
+  {
+    "source": "n407",
+    "target": "n425",
+    "type": "包含"
+  },
+  {
+    "source": "n407",
+    "target": "n426",
+    "type": "包含"
+  },
+  {
+    "source": "n407",
+    "target": "n427",
+    "type": "包含"
+  },
+  {
+    "source": "n407",
+    "target": "n428",
+    "type": "包含"
+  },
+  {
+    "source": "n407",
+    "target": "n429",
+    "type": "包含"
+  },
+  {
+    "source": "n407",
+    "target": "n430",
+    "type": "包含"
+  },
+  {
+    "source": "n407",
+    "target": "n431",
+    "type": "包含"
+  },
+  {
+    "source": "n407",
+    "target": "n432",
+    "type": "包含"
+  },
+  {
+    "source": "n407",
+    "target": "n433",
+    "type": "包含"
+  },
+  {
+    "source": "n407",
+    "target": "n434",
+    "type": "包含"
+  },
+  {
+    "source": "n407",
+    "target": "n435",
+    "type": "包含"
+  },
+  {
+    "source": "n407",
+    "target": "n436",
+    "type": "包含"
+  },
+  {
+    "source": "n407",
+    "target": "n437",
+    "type": "包含"
+  },
+  {
+    "source": "n407",
+    "target": "n438",
+    "type": "包含"
+  },
+  {
+    "source": "n407",
+    "target": "n439",
+    "type": "包含"
+  },
+  {
+    "source": "n407",
+    "target": "n440",
+    "type": "包含"
+  },
+  {
+    "source": "n407",
+    "target": "n441",
+    "type": "包含"
+  },
+  {
+    "source": "n407",
+    "target": "n442",
+    "type": "包含"
+  },
+  {
+    "source": "n407",
+    "target": "n443",
+    "type": "包含"
+  },
+  {
+    "source": "n407",
+    "target": "n444",
+    "type": "包含"
+  },
+  {
+    "source": "n407",
+    "target": "n445",
+    "type": "包含"
+  },
+  {
+    "source": "n407",
+    "target": "n446",
+    "type": "包含"
+  },
+  {
+    "source": "n407",
+    "target": "n447",
+    "type": "包含"
+  },
+  {
+    "source": "n407",
+    "target": "n448",
+    "type": "包含"
+  },
+  {
+    "source": "n407",
+    "target": "n449",
+    "type": "包含"
+  },
+  {
+    "source": "n407",
+    "target": "n450",
+    "type": "包含"
+  },
+  {
+    "source": "n407",
+    "target": "n451",
+    "type": "包含"
+  },
+  {
+    "source": "n407",
+    "target": "n452",
+    "type": "包含"
+  },
+  {
+    "source": "n407",
+    "target": "n453",
+    "type": "包含"
+  },
+  {
+    "source": "n407",
+    "target": "n454",
+    "type": "包含"
+  },
+  {
+    "source": "n455",
+    "target": "n456",
+    "type": "包含"
+  },
+  {
+    "source": "n455",
+    "target": "n457",
+    "type": "包含"
+  },
+  {
+    "source": "n455",
+    "target": "n458",
+    "type": "包含"
+  },
+  {
+    "source": "n455",
+    "target": "n459",
+    "type": "包含"
+  },
+  {
+    "source": "n455",
+    "target": "n460",
+    "type": "包含"
+  },
+  {
+    "source": "n455",
+    "target": "n461",
+    "type": "包含"
+  },
+  {
+    "source": "n455",
+    "target": "n462",
+    "type": "包含"
+  },
+  {
+    "source": "n455",
+    "target": "n463",
+    "type": "包含"
+  },
+  {
+    "source": "n455",
+    "target": "n464",
+    "type": "包含"
+  },
+  {
+    "source": "n465",
+    "target": "n466",
+    "type": "包含"
+  },
+  {
+    "source": "n465",
+    "target": "n467",
+    "type": "包含"
+  },
+  {
+    "source": "n465",
+    "target": "n468",
+    "type": "包含"
+  },
+  {
+    "source": "n465",
+    "target": "n469",
+    "type": "包含"
+  },
+  {
+    "source": "n465",
+    "target": "n470",
+    "type": "包含"
+  },
+  {
+    "source": "n465",
+    "target": "n471",
+    "type": "包含"
+  },
+  {
+    "source": "n465",
+    "target": "n472",
+    "type": "包含"
+  },
+  {
+    "source": "n465",
+    "target": "n473",
+    "type": "包含"
+  },
+  {
+    "source": "n465",
+    "target": "n474",
+    "type": "包含"
+  },
+  {
+    "source": "n465",
+    "target": "n475",
+    "type": "包含"
+  },
+  {
+    "source": "n465",
+    "target": "n476",
+    "type": "包含"
+  },
+  {
+    "source": "n465",
+    "target": "n477",
+    "type": "包含"
+  },
+  {
+    "source": "n465",
+    "target": "n478",
+    "type": "包含"
+  },
+  {
+    "source": "n465",
+    "target": "n479",
+    "type": "包含"
+  },
+  {
+    "source": "n465",
+    "target": "n480",
+    "type": "包含"
+  },
+  {
+    "source": "n465",
+    "target": "n481",
+    "type": "包含"
+  },
+  {
+    "source": "n465",
+    "target": "n482",
+    "type": "包含"
+  },
+  {
+    "source": "n465",
+    "target": "n483",
+    "type": "包含"
+  },
+  {
+    "source": "n465",
+    "target": "n484",
+    "type": "包含"
+  },
+  {
+    "source": "n465",
+    "target": "n485",
+    "type": "包含"
+  },
+  {
+    "source": "n465",
+    "target": "n486",
+    "type": "包含"
+  },
+  {
+    "source": "n465",
+    "target": "n487",
+    "type": "包含"
+  },
+  {
+    "source": "n465",
+    "target": "n488",
+    "type": "包含"
+  },
+  {
+    "source": "n465",
+    "target": "n489",
+    "type": "包含"
+  },
+  {
+    "source": "n465",
+    "target": "n490",
+    "type": "包含"
+  },
+  {
+    "source": "n465",
+    "target": "n491",
+    "type": "包含"
+  },
+  {
+    "source": "n465",
+    "target": "n492",
+    "type": "包含"
+  },
+  {
+    "source": "n465",
+    "target": "n493",
+    "type": "包含"
+  },
+  {
+    "source": "n494",
+    "target": "n495",
+    "type": "包含"
+  },
+  {
+    "source": "n494",
+    "target": "n496",
+    "type": "包含"
+  },
+  {
+    "source": "n494",
+    "target": "n497",
+    "type": "包含"
+  },
+  {
+    "source": "n494",
+    "target": "n498",
+    "type": "包含"
+  },
+  {
+    "source": "n494",
+    "target": "n499",
+    "type": "包含"
+  },
+  {
+    "source": "n494",
+    "target": "n500",
+    "type": "包含"
+  },
+  {
+    "source": "n494",
+    "target": "n501",
+    "type": "包含"
+  },
+  {
+    "source": "n494",
+    "target": "n502",
+    "type": "包含"
+  },
+  {
+    "source": "n494",
+    "target": "n503",
+    "type": "包含"
+  },
+  {
+    "source": "n494",
+    "target": "n504",
+    "type": "包含"
+  },
+  {
+    "source": "n494",
+    "target": "n505",
+    "type": "包含"
+  },
+  {
+    "source": "n494",
+    "target": "n506",
+    "type": "包含"
+  },
+  {
+    "source": "n494",
+    "target": "n507",
+    "type": "包含"
+  },
+  {
+    "source": "n508",
+    "target": "n509",
+    "type": "包含"
+  },
+  {
+    "source": "n508",
+    "target": "n510",
+    "type": "包含"
+  },
+  {
+    "source": "n508",
+    "target": "n511",
+    "type": "包含"
+  },
+  {
+    "source": "n508",
+    "target": "n512",
+    "type": "包含"
+  },
+  {
+    "source": "n508",
+    "target": "n513",
+    "type": "包含"
+  },
+  {
+    "source": "n508",
+    "target": "n514",
+    "type": "包含"
+  },
+  {
+    "source": "n508",
+    "target": "n515",
+    "type": "包含"
+  },
+  {
+    "source": "n508",
+    "target": "n516",
+    "type": "包含"
+  },
+  {
+    "source": "n508",
+    "target": "n517",
+    "type": "包含"
+  },
+  {
+    "source": "n508",
+    "target": "n518",
+    "type": "包含"
+  },
+  {
+    "source": "n508",
+    "target": "n519",
+    "type": "包含"
+  },
+  {
+    "source": "n508",
+    "target": "n520",
+    "type": "包含"
+  },
+  {
+    "source": "n508",
+    "target": "n521",
+    "type": "包含"
+  },
+  {
+    "source": "n508",
+    "target": "n522",
+    "type": "包含"
+  },
+  {
+    "source": "n508",
+    "target": "n523",
+    "type": "包含"
+  },
+  {
+    "source": "n508",
+    "target": "n524",
+    "type": "包含"
+  },
+  {
+    "source": "n508",
+    "target": "n525",
+    "type": "包含"
+  },
+  {
+    "source": "n508",
+    "target": "n526",
+    "type": "包含"
+  },
+  {
+    "source": "n508",
+    "target": "n527",
+    "type": "包含"
+  },
+  {
+    "source": "n508",
+    "target": "n528",
+    "type": "包含"
+  },
+  {
+    "source": "n508",
+    "target": "n529",
+    "type": "包含"
+  },
+  {
+    "source": "n508",
+    "target": "n530",
+    "type": "包含"
+  },
+  {
+    "source": "n508",
+    "target": "n531",
+    "type": "包含"
+  },
+  {
+    "source": "n508",
+    "target": "n532",
+    "type": "包含"
+  },
+  {
+    "source": "n508",
+    "target": "n533",
+    "type": "包含"
+  },
+  {
+    "source": "n508",
+    "target": "n534",
+    "type": "包含"
+  },
+  {
+    "source": "n508",
+    "target": "n535",
+    "type": "包含"
+  },
+  {
+    "source": "n508",
+    "target": "n536",
+    "type": "包含"
+  },
+  {
+    "source": "n508",
+    "target": "n537",
+    "type": "包含"
+  },
+  {
+    "source": "n508",
+    "target": "n538",
+    "type": "包含"
+  },
+  {
+    "source": "n508",
+    "target": "n539",
+    "type": "包含"
+  },
+  {
+    "source": "n540",
+    "target": "n541",
+    "type": "包含"
+  },
+  {
+    "source": "n540",
+    "target": "n542",
+    "type": "包含"
+  },
+  {
+    "source": "n540",
+    "target": "n543",
+    "type": "包含"
+  },
+  {
+    "source": "n540",
+    "target": "n544",
+    "type": "包含"
+  },
+  {
+    "source": "n540",
+    "target": "n545",
+    "type": "包含"
+  },
+  {
+    "source": "n540",
+    "target": "n546",
+    "type": "包含"
+  },
+  {
+    "source": "n540",
+    "target": "n547",
+    "type": "包含"
+  },
+  {
+    "source": "n540",
+    "target": "n548",
+    "type": "包含"
+  },
+  {
+    "source": "n540",
+    "target": "n549",
+    "type": "包含"
+  },
+  {
+    "source": "n540",
+    "target": "n550",
+    "type": "包含"
+  },
+  {
+    "source": "n540",
+    "target": "n551",
+    "type": "包含"
+  },
+  {
+    "source": "n540",
+    "target": "n552",
+    "type": "包含"
+  },
+  {
+    "source": "n540",
+    "target": "n553",
+    "type": "包含"
+  },
+  {
+    "source": "n540",
+    "target": "n554",
+    "type": "包含"
+  },
+  {
+    "source": "n540",
+    "target": "n555",
+    "type": "包含"
+  },
+  {
+    "source": "n540",
+    "target": "n556",
+    "type": "包含"
+  },
+  {
+    "source": "n540",
+    "target": "n557",
+    "type": "包含"
+  },
+  {
+    "source": "n540",
+    "target": "n558",
+    "type": "包含"
+  },
+  {
+    "source": "n540",
+    "target": "n559",
+    "type": "包含"
+  },
+  {
+    "source": "n560",
+    "target": "n561",
+    "type": "包含"
+  },
+  {
+    "source": "n560",
+    "target": "n562",
+    "type": "包含"
+  },
+  {
+    "source": "n560",
+    "target": "n563",
+    "type": "包含"
+  },
+  {
+    "source": "n560",
+    "target": "n564",
+    "type": "包含"
+  },
+  {
+    "source": "n560",
+    "target": "n565",
+    "type": "包含"
+  },
+  {
+    "source": "n560",
+    "target": "n566",
+    "type": "包含"
+  },
+  {
+    "source": "n560",
+    "target": "n567",
+    "type": "包含"
+  },
+  {
+    "source": "n560",
+    "target": "n568",
+    "type": "包含"
+  },
+  {
+    "source": "n560",
+    "target": "n569",
+    "type": "包含"
+  },
+  {
+    "source": "n560",
+    "target": "n570",
+    "type": "包含"
+  },
+  {
+    "source": "n560",
+    "target": "n571",
+    "type": "包含"
+  },
+  {
+    "source": "n560",
+    "target": "n572",
+    "type": "包含"
+  },
+  {
+    "source": "n560",
+    "target": "n573",
+    "type": "包含"
+  },
+  {
+    "source": "n560",
+    "target": "n574",
+    "type": "包含"
+  },
+  {
+    "source": "n560",
+    "target": "n575",
+    "type": "包含"
+  },
+  {
+    "source": "n560",
+    "target": "n576",
+    "type": "包含"
+  },
+  {
+    "source": "n560",
+    "target": "n577",
+    "type": "包含"
+  },
+  {
+    "source": "n578",
+    "target": "n579",
+    "type": "包含"
+  },
+  {
+    "source": "n578",
+    "target": "n580",
+    "type": "包含"
+  },
+  {
+    "source": "n578",
+    "target": "n581",
+    "type": "包含"
+  },
+  {
+    "source": "n578",
+    "target": "n582",
+    "type": "包含"
+  },
+  {
+    "source": "n578",
+    "target": "n583",
+    "type": "包含"
+  },
+  {
+    "source": "n578",
+    "target": "n584",
+    "type": "包含"
+  },
+  {
+    "source": "n578",
+    "target": "n585",
+    "type": "包含"
+  },
+  {
+    "source": "n578",
+    "target": "n586",
+    "type": "包含"
+  },
+  {
+    "source": "n578",
+    "target": "n587",
+    "type": "包含"
+  },
+  {
+    "source": "n578",
+    "target": "n588",
+    "type": "包含"
+  },
+  {
+    "source": "n578",
+    "target": "n589",
+    "type": "包含"
+  },
+  {
+    "source": "n578",
+    "target": "n590",
+    "type": "包含"
+  },
+  {
+    "source": "n578",
+    "target": "n591",
+    "type": "包含"
+  },
+  {
+    "source": "n578",
+    "target": "n592",
+    "type": "包含"
+  },
+  {
+    "source": "n578",
+    "target": "n593",
+    "type": "包含"
+  },
+  {
+    "source": "n578",
+    "target": "n594",
+    "type": "包含"
+  },
+  {
+    "source": "n578",
+    "target": "n595",
+    "type": "包含"
+  },
+  {
+    "source": "n578",
+    "target": "n596",
+    "type": "包含"
+  },
+  {
+    "source": "n578",
+    "target": "n597",
+    "type": "包含"
+  },
+  {
+    "source": "n578",
+    "target": "n598",
+    "type": "包含"
+  },
+  {
+    "source": "n578",
+    "target": "n599",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n601",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n602",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n603",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n604",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n605",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n606",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n607",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n608",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n609",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n610",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n611",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n612",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n613",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n614",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n615",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n616",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n617",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n618",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n619",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n620",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n621",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n622",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n623",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n624",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n625",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n626",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n627",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n628",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n629",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n630",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n631",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n632",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n633",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n634",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n635",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n636",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n637",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n638",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n639",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n640",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n641",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n642",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n643",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n644",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n645",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n646",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n647",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n648",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n649",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n650",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n651",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n652",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n653",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n654",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n655",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n656",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n657",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n658",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n659",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n660",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n661",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n662",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n663",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n664",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n665",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n666",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n667",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n668",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n669",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n670",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n671",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n672",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n673",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n674",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n675",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n676",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n677",
+    "type": "包含"
+  },
+  {
+    "source": "n600",
+    "target": "n678",
+    "type": "包含"
+  }
+];
+        
+        // 初始化Three.js場景
+        let scene, camera, renderer, controls;
+        let nodes = {}, edges = [];
+        let nodeObjects = {}, edgeObjects = [];
+        let raycaster, mouse;
+        let selectedNode = null;
+        let clock, deltaTime, totalTime = 0;
+        let isRotating = true;
+        let showLabels = true;
+        let showEdges = true;
+        let showAxes = true;
+        let currentLayout = 'sphere';
+        let frameCount = 0;
+        let lastTime = 0;
+        let fps = 0;
+
+        // 初始化
+        window.onload = function() {
+            console.log(`總節點數: ${Object.keys(knowledgeNodes).length}, 總關係數: ${relationships.length}`);
+            init();
+        };
+
+        // 初始化Three.js場景
+        function init() {
+            // 創建場景
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xf0f0f0);
+
+            // 創建相機
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 0, 50);
+
+            // 創建渲染器
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.getElementById('container').appendChild(renderer.domElement);
+
+            // 創建控制器
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+
+            // 創建射線投射器和滑鼠向量
+            raycaster = new THREE.Raycaster();
+            mouse = new THREE.Vector2();
+
+            // 創建時鐘
+            clock = new THREE.Clock();
+
+            // 添加座標軸
+            addAxes();
+
+            // 創建節點和邊
+            createNodesAndEdges();
+
+            // 設置初始佈局
+            setLayout('sphere');
+
+            // 添加事件監聽器
+            window.addEventListener('resize', onWindowResize, false);
+            renderer.domElement.addEventListener('click', onClick, false);
+            renderer.domElement.addEventListener('mousemove', onMouseMove, false);
+
+            // 設置控制按鈕事件
+            document.getElementById('reset-view').addEventListener('click', resetView);
+            document.getElementById('toggle-rotation').addEventListener('click', toggleRotation);
+            document.getElementById('toggle-labels').addEventListener('click', toggleLabels);
+            document.getElementById('toggle-edges').addEventListener('click', toggleEdges);
+            document.getElementById('toggle-axes').addEventListener('click', toggleAxes);
+            
+            document.getElementById('sphere-layout').addEventListener('click', function() {
+                setActiveLayoutButton('sphere-layout');
+                setLayout('sphere');
+            });
+            document.getElementById('hierarchical-layout').addEventListener('click', function() {
+                setActiveLayoutButton('hierarchical-layout');
+                setLayout('hierarchical');
+            });
+            document.getElementById('force-layout').addEventListener('click', function() {
+                setActiveLayoutButton('force-layout');
+                setLayout('force');
+            });
+
+            // 隱藏載入提示
+            document.getElementById('loading').style.display = 'none';
+
+            // 更新統計信息
+            updateStats();
+
+            // 開始動畫循環
+            animate();
+        }
+
+        // 添加座標軸
+        function addAxes() {
+            const axesHelper = new THREE.AxesHelper(30);
+            axesHelper.name = 'axes';
+            scene.add(axesHelper);
+        }
+
+        // 創建節點和邊
+        function createNodesAndEdges() {
+            // 創建節點
+            for (const id in knowledgeNodes) {
+                const nodeData = knowledgeNodes[id];
+                const geometry = new THREE.SphereGeometry(nodeData.level === 0 ? 1.5 : 1, 32, 32);
+                const material = new THREE.MeshPhongMaterial({ color: nodeData.color });
+                const nodeMesh = new THREE.Mesh(geometry, material);
+                nodeMesh.userData = { id: id };
+                
+                // 創建節點標籤
+                const label = new THREE.Sprite(new THREE.SpriteMaterial({
+                    map: createTextTexture(nodeData.title, nodeData.color),
+                    transparent: true
+                }));
+                label.scale.set(10, 5, 1);
+                label.position.y = nodeData.level === 0 ? 2 : 1.5;
+                label.visible = showLabels;
+                nodeMesh.add(label);
+                
+                // 添加到場景
+                scene.add(nodeMesh);
+                nodeObjects[id] = nodeMesh;
+                nodes[id] = nodeData;
+            }
+            
+            // 創建邊
+            for (const rel of relationships) {
+                if (nodeObjects[rel.source] && nodeObjects[rel.target]) {
+                    const sourcePos = nodeObjects[rel.source].position;
+                    const targetPos = nodeObjects[rel.target].position;
+                    
+                    const material = new THREE.LineBasicMaterial({ 
+                        color: 0x666666,
+                        transparent: true,
+                        opacity: 0.7
+                    });
+                    
+                    const geometry = new THREE.BufferGeometry().setFromPoints([
+                        new THREE.Vector3(sourcePos.x, sourcePos.y, sourcePos.z),
+                        new THREE.Vector3(targetPos.x, targetPos.y, targetPos.z)
+                    ]);
+                    
+                    const line = new THREE.Line(geometry, material);
+                    line.userData = { 
+                        source: rel.source, 
+                        target: rel.target,
+                        type: rel.type
+                    };
+                    
+                    scene.add(line);
+                    edgeObjects.push(line);
+                }
+            }
+            
+            // 添加光源
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+            scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(1, 1, 1);
+            scene.add(directionalLight);
+        }
+
+        // 創建文字紋理
+        function createTextTexture(text, bgColor) {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = 512;
+            canvas.height = 256;
+            
+            // 背景
+            ctx.fillStyle = bgColor;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // 邊框
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = 4;
+            ctx.strokeRect(2, 2, canvas.width - 4, canvas.height - 4);
+            
+            // 文字
+            ctx.fillStyle = '#000000';
+            ctx.font = 'bold 32px Microsoft JhengHei, Arial, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            // 處理長文字換行
+            const maxWidth = canvas.width - 40;
+            const lineHeight = 40;
+            const words = text.split('');
+            let line = '';
+            let lines = [];
+            
+            for (let i = 0; i < words.length; i++) {
+                const testLine = line + words[i];
+                const metrics = ctx.measureText(testLine);
+                const testWidth = metrics.width;
+                
+                if (testWidth > maxWidth && i > 0) {
+                    lines.push(line);
+                    line = words[i];
+                } else {
+                    line = testLine;
+                }
+            }
+            lines.push(line);
+            
+            // 繪製文字
+            const totalHeight = lines.length * lineHeight;
+            const startY = (canvas.height - totalHeight) / 2 + lineHeight / 2;
+            
+            for (let i = 0; i < lines.length; i++) {
+                ctx.fillText(lines[i], canvas.width / 2, startY + i * lineHeight);
+            }
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            return texture;
+        }
+
+        // 設置佈局
+        function setLayout(layout) {
+            currentLayout = layout;
+            
+            if (layout === 'sphere') {
+                setSphereLayout();
+            } else if (layout === 'hierarchical') {
+                setHierarchicalLayout();
+            } else if (layout === 'force') {
+                setForceLayout();
+            }
+            
+            // 更新邊的位置
+            updateEdges();
+        }
+
+        // 球形佈局
+        function setSphereLayout() {
+            const nodeIds = Object.keys(nodes);
+            const totalNodes = nodeIds.length;
+            
+            for (let i = 0; i < totalNodes; i++) {
+                const id = nodeIds[i];
+                const node = nodes[id];
+                const nodeMesh = nodeObjects[id];
+                
+                // 使用黃金螺旋算法分布節點
+                const phi = Math.acos(-1 + (2 * i) / totalNodes);
+                const theta = Math.sqrt(totalNodes * Math.PI) * phi;
+                
+                // 根據章節和層級調整半徑
+                let radius = 20 + node.level * 5;
+                
+                // 將同一章節的節點放在一起
+                const chapterOffset = (node.chapter - 1) * (Math.PI / 4);
+                
+                const x = radius * Math.cos(theta + chapterOffset) * Math.sin(phi);
+                const y = radius * Math.sin(theta + chapterOffset) * Math.sin(phi);
+                const z = radius * Math.cos(phi);
+                
+                nodeMesh.position.set(x, y, z);
+            }
+        }
+
+        // 階層佈局
+        function setHierarchicalLayout() {
+            const nodeIds = Object.keys(nodes);
+            
+            // 按章節和層級分組
+            const chapterGroups = {};
+            for (const id of nodeIds) {
+                const node = nodes[id];
+                const chapter = node.chapter;
+                const level = node.level;
+                
+                if (!chapterGroups[chapter]) {
+                    chapterGroups[chapter] = {};
+                }
+                
+                if (!chapterGroups[chapter][level]) {
+                    chapterGroups[chapter][level] = [];
+                }
+                
+                chapterGroups[chapter][level].push(id);
+            }
+            
+            // 設置節點位置
+            const chapterCount = Object.keys(chapterGroups).length;
+            const chapterSpacing = 40 / chapterCount;
+            
+            for (const chapter in chapterGroups) {
+                const chapterX = (chapter - 4.5) * chapterSpacing;
+                const levelGroups = chapterGroups[chapter];
+                
+                for (const level in levelGroups) {
+                    const levelY = 15 - level * 10;
+                    const nodeIds = levelGroups[level];
+                    const nodeCount = nodeIds.length;
+                    
+                    for (let i = 0; i < nodeCount; i++) {
+                        const id = nodeIds[i];
+                        const nodeMesh = nodeObjects[id];
+                        
+                        const nodeZ = (i - nodeCount / 2) * 3;
+                        nodeMesh.position.set(chapterX, levelY, nodeZ);
+                    }
+                }
+            }
+        }
+
+        // 力導向佈局
+        function setForceLayout() {
+            // 初始化隨機位置
+            for (const id in nodeObjects) {
+                const nodeMesh = nodeObjects[id];
+                nodeMesh.position.set(
+                    (Math.random() - 0.5) * 40,
+                    (Math.random() - 0.5) * 40,
+                    (Math.random() - 0.5) * 40
+                );
+                
+                // 添加速度屬性
+                nodeMesh.userData.velocity = new THREE.Vector3(0, 0, 0);
+            }
+            
+            // 模擬力導向佈局
+            const iterations = 100;
+            const repulsionForce = 1;
+            const attractionForce = 0.01;
+            const maxDistance = 50;
+            
+            for (let iter = 0; iter < iterations; iter++) {
+                // 計算排斥力
+                for (const id1 in nodeObjects) {
+                    const node1 = nodeObjects[id1];
+                    const pos1 = node1.position;
+                    
+                    for (const id2 in nodeObjects) {
+                        if (id1 !== id2) {
+                            const node2 = nodeObjects[id2];
+                            const pos2 = node2.position;
+                            
+                            const dx = pos1.x - pos2.x;
+                            const dy = pos1.y - pos2.y;
+                            const dz = pos1.z - pos2.z;
+                            
+                            const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+                            
+                            if (distance < maxDistance) {
+                                const force = repulsionForce / (distance * distance);
+                                
+                                node1.userData.velocity.x += dx * force;
+                                node1.userData.velocity.y += dy * force;
+                                node1.userData.velocity.z += dz * force;
+                            }
+                        }
+                    }
+                }
+                
+                // 計算吸引力
+                for (const rel of relationships) {
+                    if (nodeObjects[rel.source] && nodeObjects[rel.target]) {
+                        const sourceNode = nodeObjects[rel.source];
+                        const targetNode = nodeObjects[rel.target];
+                        
+                        const sourcePos = sourceNode.position;
+                        const targetPos = targetNode.position;
+                        
+                        const dx = targetPos.x - sourcePos.x;
+                        const dy = targetPos.y - sourcePos.y;
+                        const dz = targetPos.z - sourcePos.z;
+                        
+                        const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+                        
+                        const force = attractionForce * distance;
+                        
+                        sourceNode.userData.velocity.x += dx * force;
+                        sourceNode.userData.velocity.y += dy * force;
+                        sourceNode.userData.velocity.z += dz * force;
+                        
+                        targetNode.userData.velocity.x -= dx * force;
+                        targetNode.userData.velocity.y -= dy * force;
+                        targetNode.userData.velocity.z -= dz * force;
+                    }
+                }
+                
+                // 更新位置
+                for (const id in nodeObjects) {
+                    const node = nodeObjects[id];
+                    
+                    node.position.x += node.userData.velocity.x;
+                    node.position.y += node.userData.velocity.y;
+                    node.position.z += node.userData.velocity.z;
+                    
+                    // 重置速度
+                    node.userData.velocity.set(0, 0, 0);
+                }
+            }
+            
+            // 縮放佈局以適應視圖
+            let maxDist = 0;
+            for (const id in nodeObjects) {
+                const distance = nodeObjects[id].position.length();
+                if (distance > maxDist) {
+                    maxDist = distance;
+                }
+            }
+            
+            const scale = 20 / maxDist;
+            for (const id in nodeObjects) {
+                nodeObjects[id].position.multiplyScalar(scale);
+            }
+        }
+
+        // 更新邊的位置
+        function updateEdges() {
+            for (let i = 0; i < edgeObjects.length; i++) {
+                const edge = edgeObjects[i];
+                const sourceId = edge.userData.source;
+                const targetId = edge.userData.target;
+                
+                if (nodeObjects[sourceId] && nodeObjects[targetId]) {
+                    const sourcePos = nodeObjects[sourceId].position;
+                    const targetPos = nodeObjects[targetId].position;
+                    
+                    const points = [
+                        new THREE.Vector3(sourcePos.x, sourcePos.y, sourcePos.z),
+                        new THREE.Vector3(targetPos.x, targetPos.y, targetPos.z)
+                    ];
+                    
+                    edge.geometry.dispose();
+                    edge.geometry = new THREE.BufferGeometry().setFromPoints(points);
+                }
+            }
+        }
+
+        // 設置活動佈局按鈕
+        function setActiveLayoutButton(id) {
+            document.getElementById('sphere-layout').classList.remove('active');
+            document.getElementById('hierarchical-layout').classList.remove('active');
+            document.getElementById('force-layout').classList.remove('active');
+            document.getElementById(id).classList.add('active');
+        }
+
+        // 重置視圖
+        function resetView() {
+            camera.position.set(0, 0, 50);
+            camera.lookAt(0, 0, 0);
+            controls.reset();
+        }
+
+        // 切換旋轉
+        function toggleRotation() {
+            isRotating = !isRotating;
+            document.getElementById('toggle-rotation').textContent = isRotating ? '暫停旋轉' : '開始旋轉';
+        }
+
+        // 切換標籤
+        function toggleLabels() {
+            showLabels = !showLabels;
+            document.getElementById('toggle-labels').textContent = showLabels ? '隱藏標籤' : '顯示標籤';
+            
+            for (const id in nodeObjects) {
+                const nodeMesh = nodeObjects[id];
+                if (nodeMesh.children.length > 0) {
+                    nodeMesh.children[0].visible = showLabels;
+                }
+            }
+        }
+
+        // 切換邊
+        function toggleEdges() {
+            showEdges = !showEdges;
+            document.getElementById('toggle-edges').textContent = showEdges ? '隱藏連線' : '顯示連線';
+            
+            for (let i = 0; i < edgeObjects.length; i++) {
+                edgeObjects[i].visible = showEdges;
+            }
+        }
+
+        // 切換座標軸
+        function toggleAxes() {
+            showAxes = !showAxes;
+            document.getElementById('toggle-axes').textContent = showAxes ? '隱藏座標軸' : '顯示座標軸';
+            
+            const axes = scene.getObjectByName('axes');
+            if (axes) {
+                axes.visible = showAxes;
+            }
+        }
+
+        // 更新統計信息
+        function updateStats() {
+            document.getElementById('node-count').textContent = Object.keys(nodes).length;
+            document.getElementById('edge-count').textContent = edgeObjects.length;
+            document.getElementById('fps').textContent = fps.toFixed(0);
+        }
+
+        // 窗口大小變化
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // 點擊事件
+        function onClick(event) {
+            event.preventDefault();
+            
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            
+            raycaster.setFromCamera(mouse, camera);
+            
+            const intersects = raycaster.intersectObjects(Object.values(nodeObjects));
+            
+            if (intersects.length > 0) {
+                const object = intersects[0].object;
+                const id = object.userData.id;
+                
+                if (id && nodes[id]) {
+                    selectedNode = id;
+                    showNodeInfo(id);
+                }
+            } else {
+                hideNodeInfo();
+            }
+        }
+
+        // 鼠標移動事件
+        function onMouseMove(event) {
+            event.preventDefault();
+            
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+        }
+
+        // 顯示節點信息
+        function showNodeInfo(id) {
+            const node = nodes[id];
+            
+            document.getElementById('node-title').textContent = node.title;
+            document.getElementById('node-content').innerHTML = node.content;
+            document.getElementById('info-panel').style.display = 'block';
+        }
+
+        // 隱藏節點信息
+        function hideNodeInfo() {
+            selectedNode = null;
+            document.getElementById('info-panel').style.display = 'none';
+        }
+
+        // 動畫循環
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            // 計算FPS
+            const currentTime = performance.now();
+            frameCount++;
+            
+            if (currentTime - lastTime >= 1000) {
+                fps = frameCount * 1000 / (currentTime - lastTime);
+                frameCount = 0;
+                lastTime = currentTime;
+                updateStats();
+            }
+            
+            // 更新控制器
+            controls.update();
+            
+            // 旋轉場景
+            if (isRotating) {
+                deltaTime = clock.getDelta();
+                totalTime += deltaTime;
+                
+                scene.rotation.y += 0.1 * deltaTime;
+            }
+            
+            // 渲染場景
+            renderer.render(scene, camera);
+        }
+    </script>
+</body>
+</html>

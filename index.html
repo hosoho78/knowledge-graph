@@ -8875,6 +8875,43 @@
             // 渲染場景
             renderer.render(scene, camera);
         }
-    </script>
+    </script>// 假设 knowledgeNodes 是已经注入的完整节点列表
+// 每个 node = { id, label, level }
+// level === 0 的正是 20 个章节点
+
+// 1. 找到图例容器
+const legendDiv = document.getElementById('legend');
+// 2. 过滤出所有章（level 0），并保持它们在原数组中的顺序
+const chapters = knowledgeNodes.filter(n => n.level === 0);
+
+// 3. 为每个章节生成一行图例
+chapters.forEach((chapNode, idx) => {
+  // 你需要有一套跟力导向图同样的“配色函数”或颜色数组
+  // 这里假设你有一个 colors 数组，长度 >= chapters.length
+  const color = colors[idx % colors.length];
+
+  // 创建条目
+  const entry = document.createElement('div');
+  entry.style.display = 'flex';
+  entry.style.alignItems = 'center';
+  entry.style.marginTop = '4px';
+
+  // 小色块
+  const swatch = document.createElement('span');
+  swatch.style.display = 'inline-block';
+  swatch.style.width = '12px';
+  swatch.style.height = '12px';
+  swatch.style.background = color;
+  swatch.style.marginRight = '6px';
+  swatch.style.border = '1px solid #333';
+
+  // 文本
+  const label = document.createElement('span');
+  label.textContent = chapNode.label;
+
+  entry.appendChild(swatch);
+  entry.appendChild(label);
+  legendDiv.appendChild(entry);
+});
 </body>
 </html>

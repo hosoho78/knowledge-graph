@@ -142,7 +142,23 @@
             font-size: 14px;
             color: #2C3E50;
         }
-    </style>
+    </style>#legend-items .legend-item {
+  display: flex;
+  align-items: center;
+  margin: 4px 0;
+}
+#legend-items .legend-color {
+  flex: 0 0 12px;
+  height: 12px;
+  margin-right: 6px;
+  border: 1px solid #333;
+}
+#legend-items .legend-item span:last-child {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 </head>
 <body>
     <div id="container">

@@ -5,7 +5,7 @@ on:
   push:
     paths:
       - 'knowledge_graph.dot'
-workflow_dispatch:
+  workflow_dispatch:
 jobs:
   render:
     runs-on: ubuntu-latest

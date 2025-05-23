@@ -1,40 +1,142 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-TW">
 <head>
-  <meta charset="UTF-8" />
-  <title>3D 知识图谱</title>
-  <style>
-    body {
-      margin: 0;
-      overflow: hidden;
-      font-family: "Microsoft JhengHei", Arial, sans-serif;
-    }
-    #container {
-      position: absolute;
-      top: 0; left: 0; width: 100%; height: 100%;
-    }
-    #legend {
-      position: absolute; top: 10px; right: 10px;
-      width: 200px; max-height: 80vh;
-      background: rgba(255,255,255,0.85);
-      padding: 8px; overflow-y: auto;
-      border: 1px solid #ccc; border-radius: 4px;
-      box-shadow: 2px 2px 6px rgba(0,0,0,0.2);
-      z-index: 999;
-    }
-    #legend strong { display:block; margin-bottom:6px; font-size:14px; }
-    #legend-items .legend-item {
-      display: flex; align-items: center; margin:4px 0;
-    }
-    #legend-items .legend-color {
-      flex: 0 0 12px; height:12px; margin-right:6px;
-      border:1px solid #333;
-    }
-    #legend-items .legend-item span:last-child {
-      flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-      font-size:13px;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D 知识图谱</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three-spritetext@1.6.5/dist/three-spritetext.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FontLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/geometries/TextGeometry.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: "Microsoft JhengHei", Arial, sans-serif;
+            background-color: #f0f0f0;
+        }
+        #container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        #info-panel {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 300px;
+            background-color: rgba(255, 255, 255, 0.9);
+            border-radius: 10px;
+            padding: 15px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            display: none;
+            max-height: 80vh;
+            overflow-y: auto;
+            z-index: 100;
+        }
+        #info-panel h2 {
+            margin-top: 0;
+            color: #2C3E50;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 10px;
+        }
+        #info-panel p {
+            line-height: 1.5;
+        }
+        #controls {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background-color: rgba(255, 255, 255, 0.9);
+            border-radius: 10px;
+            padding: 15px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            z-index: 100;
+        }
+        #controls button {
+            margin-right: 10px;
+            margin-bottom: 5px;
+            padding: 8px 15px;
+            background-color: #3498DB;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        #controls button:hover {
+            background-color: #2980B9;
+        }
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 24px;
+            color: #3498DB;
+            z-index: 100;
+        }
+        .legend {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background-color: rgba(255, 255, 255, 0.9);
+            border-radius: 10px;
+            padding: 15px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            z-index: 100;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            margin-right: 10px;
+            border-radius: 3px;
+        }
+        #view-modes {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background-color: rgba(255, 255, 255, 0.9);
+            border-radius: 10px;
+            padding: 15px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            z-index: 100;
+        }
+        #view-modes button {
+            margin-right: 10px;
+            padding: 8px 15px;
+            background-color: #3498DB;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        #view-modes button.active {
+            background-color: #2C3E50;
+        }
+        #view-modes button:hover {
+            background-color: #2980B9;
+        }
+        #stats {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(255, 255, 255, 0.9);
+            border-radius: 10px;
+            padding: 10px 15px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            z-index: 100;
+            font-size: 14px;
+            color: #2C3E50;
+        }
+    </style>
 </head>
 <body>
     <div id="container">
@@ -58,28 +160,86 @@
             節點數: <span id="node-count">0</span> | 連線數: <span id="edge-count">0</span> | FPS: <span id="fps">0</span>
         </div>
         <div class="legend">
-  <h3>章节图例</h3>
-  <div id="legend-items"></div>  <!-- 空容器，脚本会往里填 -->
-</<!-- 自动生成的章节图例容器 -->
-<div id="legend" style="
-     position: absolute;
-     top: 10px;
-     right: 10px;
-     background: rgba(255,255,255,0.8);
-     padding: 10px;
-     max-height: 80vh;
-     overflow-y: auto;
-     border-radius: 4px;
-     z-index: 200;
-">
-  <strong>章节图例</strong>
-  <div id="legend-items"></div>
-</div>
-            
-                
-  
-            
-            
+            <h3>图例</h3>
+             <div class="legend-item">
+                <div class="legend-color" style="background-color: #e6194b;"></div>
+                <span>第1章：引言</span>
+            </div>
+             <div class="legend-item">
+                <div class="legend-color" style="background-color: #3cb44b;"></div>
+                <span>第2章：线性代数</span>
+            </div>
+             <div class="legend-item">
+                <div class="legend-color" style="background-color: #ffe119;"></div>
+                <span>第3章：概率与信息论</span>
+            </div>
+             <div class="legend-item">
+                <div class="legend-color" style="background-color: #4363d8;"></div>
+                <span>第4章：数值计算</span>
+            </div>
+             <div class="legend-item">
+                <div class="legend-color" style="background-color: #f58231;"></div>
+                <span>第5章：机器学习基础</span>
+            </div>
+             <div class="legend-item">
+                <div class="legend-color" style="background-color: #911eb4;"></div>
+                <span>第6章：深度前馈网络</span>
+            </div>
+             <div class="legend-item">
+                <div class="legend-color" style="background-color: #46f0f0;"></div>
+                <span>第7章：深度学习中的正则化</span>
+            </div>
+             <div class="legend-item">
+                <div class="legend-color" style="background-color: #f032e6;"></div>
+                <span>第8章：深度模型中的优化</span>
+            </div>
+             <div class="legend-item">
+                <div class="legend-color" style="background-color: #bcf60c;"></div>
+                <span>第9章：卷积网络</span>
+            </div>
+             <div class="legend-item">
+                <div class="legend-color" style="background-color: #fabebe;"></div>
+                <span>第10章：序列建模：循环和递归网络</span>
+            </div>
+             <div class="legend-item">
+                <div class="legend-color" style="background-color: #008080;"></div>
+                <span>第11章：实践方法论</span>
+            </div>
+             <div class="legend-item">
+                <div class="legend-color" style="background-color: #e6beff;"></div>
+                <span>第12章：应用</span>
+            </div>
+             <div class="legend-item">
+                <div class="legend-color" style="background-color: #9a6324;"></div>
+                <span>第13章：线性因子模型</span>
+            </div>
+             <div class="legend-item">
+                <div class="legend-color" style="background-color: #fffac8;"></div>
+                <span>第14章：自编码器</span>
+            </div>
+             <div class="legend-item">
+                <div class="legend-color" style="background-color: #800000;"></div>
+                <span>第15章：表示学习</span>
+            </div>
+             <div class="legend-item">
+                <div class="legend-color" style="background-color: #aaffc3;"></div>
+                <span>第16章：结构化概率模型</span>
+            </div>
+             <div class="legend-item">
+                <div class="legend-color" style="background-color: #808000;"></div>
+                <span>第17章：蒙特卡罗方法</span>
+            </div>
+             <div class="legend-item">
+                <div class="legend-color" style="background-color: #ffd8b1;"></div>
+                <span>第18章：直面配分函数</span>
+            </div>
+             <div class="legend-item">
+                <div class="legend-color" style="background-color: #000075;"></div>
+                <span>第19章：近似推断</span>
+            </div>
+             <div class="legend-item">
+                <div class="legend-color" style="background-color: #808080;"></div>
+                <span>第20章：深度生成模型</span>
             </div>
         </div>
         <div id="loading">載入中...</div>
@@ -8757,126 +8917,6 @@
             // 渲染場景
             renderer.render(scene, camera);
         }
-    </script>// 假设 knowledgeNodes 是已经注入的完整节点列表
-// 每个 node = { id, label, level }
-// level === 0 的正是 20 个章节点
-
-// 1. 找到图例容器
-const legendDiv = document.getElementById('legend');
-// 2. 过滤出所有章（level 0），并保持它们在原数组中的顺序
-const chapters = knowledgeNodes.filter(n => n.level === 0);
-
-// 3. 为每个章节生成一行图例
-chapters.forEach((chapNode, idx) => {
-  // 你需要有一套跟力导向图同样的“配色函数”或颜色数组
-  // 这里假设你有一个 colors 数组，长度 >= chapters.length
-  const color = colors[idx % colors.length];
-
-  // 创建条目
-  const entry = document.createElement('div');
-  entry.style.display = 'flex';
-  entry.style.alignItems = 'center';
-  entry.style.marginTop = '4px';
-
-  // 小色块
-  const swatch = document.createElement('span');
-  swatch.style.display = 'inline-block';
-  swatch.style.width = '12px';
-  swatch.style.height = '12px';
-  swatch.style.background = color;
-  swatch.style.marginRight = '6px';
-  swatch.style.border = '1px solid #333';
-
-  // 文本
-  const label = document.createElement('span');
-  label.textContent = chapNode.label;
-
-  entry.appendChild(swatch);
-  entry.appendChild(label);
-  legendDiv.appendChild(entry);
-<script>
-  // 假设你的知识节点对象叫 knowledgeNodes：
-  // const knowledgeNodes = { … };
-
-  // 1) 先把所有节点按 chapter 分组，收集出唯一的章节号
-  const chapters = {};
-  Object.values(knowledgeNodes).forEach(node => {
-    const chap = node.chapter;
-    if (chap != null && !chapters[chap]) {
-      chapters[chap] = node.color;        // 记录这个章节的颜色
-    }
-  });
-
-  // 2) 准备章节标题（你可以根据实际标题改这里的名字）
-  const chapterNames = {
-    0: '第1章：引言',
-    1: '第2章：线性代数',
-    2: '第3章：概率与信息论',
-    3: '第4章：数值计算',
-    4: '第5章：机器学习基础',
-    5: '第6章：深度前馈网络',
-    6: '第7章：深度学习中的正则化',
-    7: '第8章：深度模型中的优化',
-    8: '第9章：卷积网络',
-    9: '第10章：序列建模：循环和递归网络',
-    10: '第11章：实践方法论',
-    11: '第12章：应用',
-    12: '第13章：线性因子模型',
-    13: '第14章：自编码器',
-    14: '第15章：表示学习',
-    15: '第16章：深度学习中的结构化概率模型',
-    16: '第17章：蒙特卡罗方法',
-    17: '第18章：直面配分函数',
-    18: '第19章：近似推断',
-    19: '第20章：深度生成模型'
-  };
-
-  // 3) 把它们按章节号排序后，插入到 legend-items 里
-  const legendContainer = document.getElementById('legend-items');
-  Object.keys(chapters)
-    .map(k => parseInt(k))
-    .sort((a, b) => a - b)
-    .forEach(chapNum => {
-      const color = chapters[chapNum];
-      const title = chapterNames[chapNum] || `第${chapNum+1}章`;
-      // 创建 DOM
-      const item = document.createElement('div');
-      item.className = 'legend-item';
-      item.innerHTML = `
-        <div class="legend-color" style="background-color: ${color};"></div>
-        <span>${title}</span>
-      `;
-      legendContainer.appendChild(item);
-    });
-</script><script>
-window.addEventListener('load', () => {
-  if (!window.knowledgeNodes || !window.colors) return;
-  const legend = document.getElementById('legend-items');
-
-  const chapters = knowledgeNodes
-    .filter(n => {
-      const m = n.label.match(/^第(\d+)章/);
-      return m && +m[1] >= 1 && +m[1] <= 20;
-    })
-    .map(n => ({
-      num: +n.label.match(/^第(\d+)章/)[1],
-      label: n.label
-    }))
-    .sort((a, b) => a.num - b.num);
-
-  chapters.forEach((ch, i) => {
-    const color = colors[i % colors.length];
-    const item = document.createElement('div');
-    item.className = 'legend-item';
-    item.innerHTML = `
-      <span class="legend-color" style="background:${color};"></span>
-      <span>${ch.label}</span>
-    `;
-    legend.appendChild(item);
-  });
-});
-</script>
-
-</script>
+    </script>
 </body>
 </html>

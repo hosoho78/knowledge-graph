@@ -1,8 +1,8 @@
-name: Render Graphviz to SVG
+name: Render DOT to SVG
 
+# 仅在推送 dot 文件时触发
 on:
   push:
-    # 任意时候 knowledge_graph.dot 发生变化就触发
     paths:
       - 'knowledge_graph.dot'
 
@@ -13,20 +13,21 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          persist-credentials: true  # 让后续的 commit 能够推回仓库
 
       - name: Install Graphviz
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y graphviz
+        run: sudo apt-get update && sudo apt-get install -y graphviz
 
-      - name: Render DOT file to SVG
+      - name: Render DOT → SVG
         run: |
           dot -Tsvg knowledge_graph.dot -o knowledge_graph.svg
 
-      - name: Commit and push generated SVG
+      - name: Commit rendered SVG
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add knowledge_graph.svg
-          git diff-index --quiet HEAD || git commit -m "chore: auto-generate SVG from DOT"
+          git add knowledge_graph.dot
+          git commit -m "chore: auto-render knowledge_graph.svg" || echo "No changes to commit"
           git push

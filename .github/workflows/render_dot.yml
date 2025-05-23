@@ -6,7 +6,6 @@ on:
     paths:
       - 'knowledge_graph.dot'
   workflow_dispatch:
-
 jobs:
   render:
     name: 渲染 DOT 文件

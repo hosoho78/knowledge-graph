@@ -8849,26 +8849,21 @@ chapters.forEach((chapNode, idx) => {
       legendContainer.appendChild(item);
     });
 </script><script>
-<script>
-// 动态生成：只取“第1～20章”并按数字正序
 window.addEventListener('load', () => {
   if (!window.knowledgeNodes || !window.colors) return;
   const legend = document.getElementById('legend-items');
 
-  // 1. 过滤出 “第N章” 且 N 在 1–20 范围内
   const chapters = knowledgeNodes
     .filter(n => {
       const m = n.label.match(/^第(\d+)章/);
       return m && +m[1] >= 1 && +m[1] <= 20;
     })
-    // 2. 提取数字并排序
     .map(n => ({
       num: +n.label.match(/^第(\d+)章/)[1],
       label: n.label
     }))
     .sort((a, b) => a.num - b.num);
 
-  // 3. 生成图例
   chapters.forEach((ch, i) => {
     const color = colors[i % colors.length];
     const item = document.createElement('div');
@@ -8881,6 +8876,7 @@ window.addEventListener('load', () => {
   });
 });
 </script>
+
 </script>
 </body>
 </html>

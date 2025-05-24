@@ -1,4 +1,23 @@
+digraph KnowledgeGraph {
+  graph [overlap=false];
+  node [shape=box, fontname="Arial"];
 
+  n0  [label="第2章  线性代数"];
+  n1  [label="1.1 本书面向的读者"];
+  n2  [label="1.2 深度学习的历史趋势"];
+  n3  [label="1.2.1 神经网络的众多名称和命运变迁"];
+  n4  [label="1.2.2 与日俱增的数据量"];
+  n5  [label="1.2.3 与日俱增的模型规模"];
+  n6  [label="1.2.4 与日俱增的精度、复杂度和对现实世界的冲击"];
+  // … 省略中间节点 …
+  n100 [label="第20章 深度生成模型"];
+
+  // 样例连线
+  n0 -> n1;
+  n1 -> n2;
+  n2 -> n3;
+  // … 其它关系 …
+}
 digraph KnowledgeGraph {
   graph [overlap=false];
   node [shape=box,fontname="Arial"];

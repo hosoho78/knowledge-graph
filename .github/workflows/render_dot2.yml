@@ -3,7 +3,7 @@ name: Render DOT → SVG
 
 # 当推送 .dot 文件 或 在 Actions 界面手动触发 时执行
 on:
-  push:n
+  push:
     paths:
       - 'knowledge_graph.dot'
   workflow_dispatch:

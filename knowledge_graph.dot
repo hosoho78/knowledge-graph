@@ -1,3 +1,7 @@
+
+digraph G {
+  Hello -> World;
+}
 digraph KnowledgeGraph {
   graph [overlap=false];
   node [shape=box,fontname="Arial"];

@@ -1,0 +1,45 @@
+# 文件名：.github/workflows/render_dot.yml
+name: Render DOT → SVG
+
+# 当推送 .dot 文件 或 在 Actions 界面手动触发 时执行
+on:
+  push:n
+    paths:
+      - 'knowledge_graph.dot'
+  workflow_dispatch:
+
+# 赋予写权限，否则无法用 GITHUB_TOKEN 推送文件
+permissions:
+  contents: write
+
+jobs:
+  render:
+    name: 渲染 DOT 文件
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. 签出仓库
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true  # 让后续 git push 用到 GITHUB_TOKEN
+
+      # 2. 安装 Graphviz
+      - name: Install Graphviz
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y graphviz
+
+      # 3. 渲染 DOT → SVG
+      - name: Render DOT → SVG
+        run: |
+          dot -Tsvg knowledge_graph.dot -o knowledge_graph.svg
+
+      # 4. 提交并推送渲染好的 SVG
+      - name: Commit and push rendered SVG
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add knowledge_graph.svg
+          git commit -m "chore: auto-render knowledge_graph.svg" || echo "No changes to commit"
+          git push
